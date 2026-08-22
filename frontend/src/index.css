@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light Theme Tokens */
+  --bg-base: #FFFFFF;
+  --bg-surface: #F8F9FA;
+  --bg-elevated: #FFFFFF;
+  --bg-chat: #F2EFE9;
+
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --text-tertiary: #9CA3AF;
+  --text-inverse: #FFFFFF;
+
+  --border-subtle: #E5E7EB;
+  --border-default: #D1D5DB;
+  --border-strong: #9CA3AF;
+
+  --bubble-sent: #4A9B6F;
+  --bubble-sent-text: #FFFFFF;
+  --bubble-recv: #FFFFFF;
+  --bubble-recv-text: #111827;
+
+  --accent: #4A9B6F;
+  --accent-hover: #357A55;
+  --accent-light: #F0F7F4;
+}
+
+:root[data-theme="dark"] {
+  /* Dark Theme Tokens */
+  --bg-base: #0D0F12;
+  --bg-surface: #15191E;
+  --bg-elevated: #1B2129;
+  --bg-chat: #101317;
+
+  --text-primary: #F3F4F6;
+  --text-secondary: #9CA3AF;
+  --text-tertiary: #6B7280;
+  --text-inverse: #0D0F12;
+
+  --border-subtle: #202630;
+  --border-default: #2D3748;
+  --border-strong: #4B5563;
+
+  --bubble-sent: #2A6346;
+  --bubble-sent-text: #F3F4F6;
+  --bubble-recv: #1E242C;
+  --bubble-recv-text: #F3F4F6;
+
+  --accent: #5BB37F;
+  --accent-hover: #4A9B6F;
+  --accent-light: #182A20;
+}
+
+/* Base Body Styles */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--text-primary);
+  background-color: var(--bg-base);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Message Animation */
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-message-in {
+  animation: messageIn 0.14s cubic-bezier(0, 0, 0.2, 1) forwards;
+}
+
+/* Typing Bounce Animation */
+@keyframes typingBounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.typing-dot-1 {
+  animation: typingBounce 1.2s infinite ease-in-out;
+}
+.typing-dot-2 {
+  animation: typingBounce 1.2s infinite ease-in-out 0.2s;
+}
+.typing-dot-3 {
+  animation: typingBounce 1.2s infinite ease-in-out 0.4s;
+}
+
+/* Shimmer Loading */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--border-subtle) 25%,
+    var(--bg-surface) 50%,
+    var(--border-subtle) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
