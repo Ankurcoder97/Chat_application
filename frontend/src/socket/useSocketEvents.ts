@@ -164,9 +164,18 @@ export function useSocketEvents() {
       useCallStore.getState().rejectCall();
     };
 
-    const handleCallSignal = ({ signalData }: any) => {
+    const handleCallSignal = ({ callId, senderId, signalData }: any) => {
+      const store = useCallStore.getState();
       if (signalData.type === 'offer') {
-        useCallStore.getState().setIncomingOffer(signalData.sdp);
+        store.setIncomingOffer(signalData.sdp);
+        if (store.callStatus === 'connected' && store.peer) {
+          webrtc.handleOfferAndAnswer(
+            callId || store.callId,
+            senderId || store.peer.id,
+            signalData.sdp,
+            store.callType
+          );
+        }
       } else {
         webrtc.handleSignal(signalData);
       }

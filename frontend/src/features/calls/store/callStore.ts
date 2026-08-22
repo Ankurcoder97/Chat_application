@@ -52,10 +52,17 @@ export const useCallStore = create<CallState>((set, get) => {
     isVideoEnabled: true,
     incomingOfferSdp: null,
 
-    startOutgoingCall: (peer, callType) => {
+    startOutgoingCall: async (peer, callType) => {
       ringtone.playOutgoing();
-      const socket = getSocket();
 
+      // Acquire media immediately so local preview is visible
+      try {
+        await webrtc.getLocalMedia(callType);
+      } catch (err) {
+        console.error('Failed to get media devices', err);
+      }
+
+      const socket = getSocket();
       socket?.emit(
         'call:initiate',
         { recipientId: peer.id, callType },
@@ -72,6 +79,7 @@ export const useCallStore = create<CallState>((set, get) => {
             });
           } else {
             ringtone.playEndCall();
+            webrtc.cleanup();
             set({ callStatus: 'idle', peer: null, callId: null });
           }
         }
@@ -100,10 +108,11 @@ export const useCallStore = create<CallState>((set, get) => {
       const { callId, peer, callType, incomingOfferSdp } = get();
       if (!callId || !peer) return;
 
+      set({ callStatus: 'connected' });
+
+      // Notify caller that call was accepted
       const socket = getSocket();
       socket?.emit('call:accept', { callId, callerId: peer.id });
-
-      set({ callStatus: 'connected' });
 
       // Start duration timer
       if (callTimer) clearInterval(callTimer);
@@ -111,11 +120,12 @@ export const useCallStore = create<CallState>((set, get) => {
         get().incrementDuration();
       }, 1000);
 
-      // If offer SDP arrived, answer it; else get local media ready
+      // Acquire local media
+      await webrtc.getLocalMedia(callType);
+
+      // If offer SDP has arrived, process it immediately!
       if (incomingOfferSdp) {
         await webrtc.handleOfferAndAnswer(callId, peer.id, incomingOfferSdp, callType);
-      } else {
-        await webrtc.getLocalMedia(callType);
       }
     },
 
@@ -132,7 +142,7 @@ export const useCallStore = create<CallState>((set, get) => {
         get().incrementDuration();
       }, 1000);
 
-      // Create WebRTC Offer
+      // Caller creates WebRTC Offer and sends it to recipient
       await webrtc.createOffer(callId, peer.id, callType);
     },
 
@@ -145,7 +155,14 @@ export const useCallStore = create<CallState>((set, get) => {
         socket?.emit('call:reject', { callId, callerId: peer.id, reason });
       }
       webrtc.cleanup();
-      set({ callStatus: 'idle', peer: null, callId: null, localStream: null, remoteStream: null });
+      set({
+        callStatus: 'idle',
+        peer: null,
+        callId: null,
+        localStream: null,
+        remoteStream: null,
+        incomingOfferSdp: null,
+      });
     },
 
     endCall: () => {
@@ -167,6 +184,7 @@ export const useCallStore = create<CallState>((set, get) => {
         localStream: null,
         remoteStream: null,
         duration: 0,
+        incomingOfferSdp: null,
       });
     },
 
@@ -182,6 +200,7 @@ export const useCallStore = create<CallState>((set, get) => {
         localStream: null,
         remoteStream: null,
         duration: 0,
+        incomingOfferSdp: null,
       });
     },
 

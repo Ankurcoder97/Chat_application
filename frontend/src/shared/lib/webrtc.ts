@@ -5,6 +5,8 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
   ],
 };
 
@@ -12,6 +14,7 @@ export class WebRTCManager {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
+  private pendingCandidates: RTCIceCandidateInit[] = [];
 
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
   private onLocalStreamCallback: ((stream: MediaStream) => void) | null = null;
@@ -36,7 +39,14 @@ export class WebRTCManager {
         noiseSuppression: true,
         autoGainControl: true,
       },
-      video: callType === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
+      video:
+        callType === 'video'
+          ? {
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
+              facingMode: 'user',
+            }
+          : false,
     };
 
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -47,40 +57,75 @@ export class WebRTCManager {
     return stream;
   }
 
-  // Caller initiates Peer Connection and creates Offer
-  public async createOffer(callId: string, recipientId: string, callType: 'voice' | 'video') {
-    this.peerConnection = new RTCPeerConnection(RTC_CONFIG);
-    this.remoteStream = new MediaStream();
+  private initPeerConnection(callId: string, peerId: string): RTCPeerConnection {
+    if (this.peerConnection) {
+      return this.peerConnection;
+    }
 
-    const stream = await this.getLocalMedia(callType);
-    stream.getTracks().forEach((track) => {
-      this.peerConnection?.addTrack(track, stream);
-    });
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    this.peerConnection = pc;
+    this.pendingCandidates = [];
 
-    // Handle remote tracks
-    this.peerConnection.ontrack = (event) => {
-      event.streams[0].getTracks().forEach((track) => {
-        this.remoteStream?.addTrack(track);
+    // Create a new remote MediaStream
+    const remote = new MediaStream();
+    this.remoteStream = remote;
+
+    // Attach local tracks if already available
+    if (this.localStream) {
+      this.localStream.getTracks().forEach((track) => {
+        pc.addTrack(track, this.localStream!);
       });
-      if (this.onRemoteStreamCallback && this.remoteStream) {
-        this.onRemoteStreamCallback(this.remoteStream);
+    }
+
+    // Handle incoming remote tracks
+    pc.ontrack = (event) => {
+      event.streams[0]?.getTracks().forEach((track) => {
+        if (!remote.getTracks().some((t) => t.id === track.id)) {
+          remote.addTrack(track);
+        }
+      });
+      if (this.onRemoteStreamCallback) {
+        this.onRemoteStreamCallback(remote);
       }
     };
 
-    // Forward ICE candidates to recipient
-    this.peerConnection.onicecandidate = (event) => {
+    // Forward ICE candidates to peer
+    pc.onicecandidate = (event) => {
       if (event.candidate) {
         const socket = getSocket();
         socket?.emit('call:signal', {
           callId,
-          recipientId,
-          signalData: { type: 'candidate', candidate: event.candidate },
+          recipientId: peerId,
+          signalData: { type: 'candidate', candidate: event.candidate.toJSON() },
         });
       }
     };
 
-    const offer = await this.peerConnection.createOffer();
-    await this.peerConnection.setLocalDescription(offer);
+    pc.onconnectionstatechange = () => {
+      console.log('WebRTC Connection State:', pc.connectionState);
+    };
+
+    return pc;
+  }
+
+  // Caller creates and sends WebRTC Offer
+  public async createOffer(callId: string, recipientId: string, callType: 'voice' | 'video') {
+    const stream = await this.getLocalMedia(callType);
+    const pc = this.initPeerConnection(callId, recipientId);
+
+    // Ensure tracks are added
+    stream.getTracks().forEach((track) => {
+      const senders = pc.getSenders();
+      if (!senders.some((s) => s.track?.id === track.id)) {
+        pc.addTrack(track, stream);
+      }
+    });
+
+    const offer = await pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: callType === 'video',
+    });
+    await pc.setLocalDescription(offer);
 
     const socket = getSocket();
     socket?.emit('call:signal', {
@@ -97,37 +142,24 @@ export class WebRTCManager {
     offerSdp: RTCSessionDescriptionInit,
     callType: 'voice' | 'video'
   ) {
-    this.peerConnection = new RTCPeerConnection(RTC_CONFIG);
-    this.remoteStream = new MediaStream();
-
     const stream = await this.getLocalMedia(callType);
+    const pc = this.initPeerConnection(callId, callerId);
+
+    // Ensure local tracks are added
     stream.getTracks().forEach((track) => {
-      this.peerConnection?.addTrack(track, stream);
+      const senders = pc.getSenders();
+      if (!senders.some((s) => s.track?.id === track.id)) {
+        pc.addTrack(track, stream);
+      }
     });
 
-    this.peerConnection.ontrack = (event) => {
-      event.streams[0].getTracks().forEach((track) => {
-        this.remoteStream?.addTrack(track);
-      });
-      if (this.onRemoteStreamCallback && this.remoteStream) {
-        this.onRemoteStreamCallback(this.remoteStream);
-      }
-    };
+    await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
 
-    this.peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        const socket = getSocket();
-        socket?.emit('call:signal', {
-          callId,
-          recipientId: callerId,
-          signalData: { type: 'candidate', candidate: event.candidate },
-        });
-      }
-    };
+    // Drain queued ICE candidates
+    await this.drainPendingCandidates();
 
-    await this.peerConnection.setRemoteDescription(new RTCSessionDescription(offerSdp));
-    const answer = await this.peerConnection.createAnswer();
-    await this.peerConnection.setLocalDescription(answer);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
 
     const socket = getSocket();
     socket?.emit('call:signal', {
@@ -137,17 +169,37 @@ export class WebRTCManager {
     });
   }
 
-  // Process incoming signal (Answer or ICE candidate)
+  // Handle incoming signals (SDP Answer or ICE Candidate)
   public async handleSignal(signalData: any) {
     if (!this.peerConnection) return;
 
-    if (signalData.type === 'answer') {
+    if (signalData.type === 'answer' && signalData.sdp) {
       await this.peerConnection.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
+      await this.drainPendingCandidates();
     } else if (signalData.type === 'candidate' && signalData.candidate) {
-      try {
-        await this.peerConnection.addIceCandidate(new RTCIceCandidate(signalData.candidate));
-      } catch (err) {
-        console.error('Error adding ICE candidate', err);
+      const candidate = new RTCIceCandidate(signalData.candidate);
+      if (this.peerConnection.remoteDescription) {
+        try {
+          await this.peerConnection.addIceCandidate(candidate);
+        } catch (err) {
+          console.error('Error adding ICE candidate', err);
+        }
+      } else {
+        this.pendingCandidates.push(signalData.candidate);
+      }
+    }
+  }
+
+  private async drainPendingCandidates() {
+    if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
+    while (this.pendingCandidates.length > 0) {
+      const candidate = this.pendingCandidates.shift();
+      if (candidate) {
+        try {
+          await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          console.error('Error adding queued ICE candidate', err);
+        }
       }
     }
   }
@@ -169,6 +221,7 @@ export class WebRTCManager {
   }
 
   public cleanup() {
+    this.pendingCandidates = [];
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => track.stop());
       this.localStream = null;
