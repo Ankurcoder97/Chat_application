@@ -31,6 +31,19 @@ export interface CallData {
   status: CallStatus;
 }
 
+export interface CallHistoryItem {
+  id: string;
+  callId: string;
+  peer: User;
+  isCaller: boolean;
+  direction: 'incoming' | 'outgoing' | 'missed';
+  callType: CallType;
+  status: 'missed' | 'rejected' | 'completed' | 'cancelled';
+  duration: number;
+  startedAt: string;
+  endedAt?: string;
+}
+
 export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'voice';
 
 export interface MediaPayload {

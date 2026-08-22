@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { MediaPayload } from '../types';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type MobileTab = 'chats' | 'search' | 'settings';
+export type MobileTab = 'chats' | 'calls' | 'settings';
 
 interface UIState {
   theme: ThemeMode;

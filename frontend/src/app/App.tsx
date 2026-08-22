@@ -8,6 +8,7 @@ import { ChatView } from '../features/messages/components/ChatView';
 import { SettingsPage } from '../features/settings/pages/SettingsPage';
 import { MediaViewer } from '../features/media/components/MediaViewer';
 import { CallModal } from '../features/calls/components/CallModal';
+import { CallsList } from '../features/calls/components/CallsList';
 import { connectSocket, disconnectSocket } from '../socket/socketClient';
 import { useSocketEvents } from '../socket/useSocketEvents';
 import { Loader2 } from 'lucide-react';
@@ -67,19 +68,29 @@ export const App: React.FC = () => {
         {/* Left Column / Sidebar */}
         <div
           className={`h-full w-full md:w-[360px] lg:w-[400px] flex-shrink-0 min-h-0 ${
-            activeConversation || mobileTab === 'settings' ? 'hidden md:flex flex-col' : 'flex flex-col'
+            activeConversation || mobileTab !== 'chats' ? 'hidden md:flex flex-col' : 'flex flex-col'
           }`}
         >
-          {mobileTab === 'settings' ? <SettingsPage /> : <ChatList />}
+          {mobileTab === 'calls' ? (
+            <CallsList />
+          ) : mobileTab === 'settings' ? (
+            <SettingsPage />
+          ) : (
+            <ChatList />
+          )}
         </div>
 
         {/* Right Column / Active Chat Area */}
         <div
           className={`h-full flex-1 flex flex-col min-h-0 overflow-hidden ${
-            !activeConversation && mobileTab !== 'settings' ? 'hidden md:flex' : 'flex'
+            !activeConversation && mobileTab === 'chats' ? 'hidden md:flex' : 'flex'
           }`}
         >
-          {mobileTab === 'settings' ? (
+          {mobileTab === 'calls' ? (
+            <div className="hidden md:flex flex-1 min-h-0">
+              <CallsList />
+            </div>
+          ) : mobileTab === 'settings' ? (
             <div className="hidden md:flex flex-1 min-h-0">
               <SettingsPage />
             </div>

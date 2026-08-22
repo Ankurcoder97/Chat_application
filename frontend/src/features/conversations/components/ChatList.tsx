@@ -4,13 +4,11 @@ import { ChatListItem } from './ChatListItem';
 import { UserSearchModal } from './UserSearchModal';
 import { Conversation } from '../../../shared/types';
 import { useChatStore } from '../store/chatStore';
-import { useAuthStore } from '../../auth/store/authStore';
 import { useUIStore } from '../../../shared/store/uiStore';
-import { Search, Plus, MessageSquare, Moon, Sun, LogOut, Settings as SettingsIcon } from 'lucide-react';
+import { Search, Plus, MessageSquare, Phone, Moon, Sun, Settings as SettingsIcon } from 'lucide-react';
 import api from '../../../shared/lib/axios';
 
 export const ChatList: React.FC = () => {
-  const { user, logout } = useAuthStore();
   const { activeConversation, searchQuery, setSearchQuery } = useChatStore();
   const { theme, setTheme, setMobileTab } = useUIStore();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -158,40 +156,32 @@ export const ChatList: React.FC = () => {
         )}
       </div>
 
-      {/* User Footer Profile Strip */}
-      {user && (
-        <div className="p-3 border-t border-border-subtle flex items-center justify-between bg-surface-muted/50">
-          <div
-            onClick={() => setMobileTab('settings')}
-            className="flex items-center space-x-2.5 cursor-pointer hover:opacity-80 transition-opacity"
-          >
-            <div className="w-8 h-8 rounded-full bg-accent-500 flex items-center justify-center text-white text-xs font-semibold">
-              {user.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold text-text-primary truncate max-w-[120px]">{user.name}</span>
-              <span className="text-[10px] text-text-tertiary">Online</span>
-            </div>
-          </div>
+      {/* Bottom Navigation Bar */}
+      <div className="flex items-center justify-around py-2 bg-surface-elevated border-t border-border-subtle flex-shrink-0">
+        <button
+          onClick={() => setMobileTab('chats')}
+          className="flex flex-col items-center space-y-1 py-1 px-4 text-accent-500 font-semibold transition-colors"
+        >
+          <MessageSquare size={20} />
+          <span className="text-[10px]">Chats</span>
+        </button>
 
-          <div className="flex items-center space-x-1">
-            <button
-              onClick={() => setMobileTab('settings')}
-              className="p-1.5 text-text-secondary hover:text-text-primary rounded-lg hover:bg-surface-elevated transition-colors"
-              title="Settings"
-            >
-              <SettingsIcon size={16} />
-            </button>
-            <button
-              onClick={() => logout()}
-              className="p-1.5 text-text-secondary hover:text-rose-500 rounded-lg hover:bg-surface-elevated transition-colors"
-              title="Sign Out"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        </div>
-      )}
+        <button
+          onClick={() => setMobileTab('calls')}
+          className="flex flex-col items-center space-y-1 py-1 px-4 text-text-tertiary hover:text-text-primary transition-colors"
+        >
+          <Phone size={20} />
+          <span className="text-[10px]">Calls</span>
+        </button>
+
+        <button
+          onClick={() => setMobileTab('settings')}
+          className="flex flex-col items-center space-y-1 py-1 px-4 text-text-tertiary hover:text-text-primary transition-colors"
+        >
+          <SettingsIcon size={20} />
+          <span className="text-[10px]">Settings</span>
+        </button>
+      </div>
 
       {/* Search & Start Modal */}
       <UserSearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />

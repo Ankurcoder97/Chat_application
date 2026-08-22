@@ -2,7 +2,20 @@ import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthenticatedSocket } from '../socket.server';
 import { User } from '../../modules/users/user.model';
+import { CallLog } from '../../modules/calls/callLog.model';
 import { logger } from '../../shared/logger';
+
+// Track active call start timestamps in memory
+const activeCalls = new Map<
+  string,
+  {
+    startedAt: Date;
+    connectedAt?: Date;
+    callerId: string;
+    recipientId: string;
+    callType: 'voice' | 'video';
+  }
+>();
 
 export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSocket) {
   const currentUserId = socket.user?.userId;
@@ -23,6 +36,26 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       }
 
       const callId = uuidv4();
+      const now = new Date();
+
+      // Track active call
+      activeCalls.set(callId, {
+        startedAt: now,
+        callerId: currentUserId,
+        recipientId,
+        callType,
+      });
+
+      // Create initial CallLog document
+      await CallLog.create({
+        callId,
+        callerId: currentUserId,
+        recipientId,
+        callType,
+        status: 'missed',
+        duration: 0,
+        startedAt: now,
+      });
 
       const callPayload = {
         callId,
@@ -34,10 +67,9 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
         },
         recipientId,
         callType, // 'voice' | 'video'
-        startedAt: new Date().toISOString(),
+        startedAt: now.toISOString(),
       };
 
-      // Notify caller of generated callId
       if (typeof callback === 'function') {
         callback({ success: true, callId });
       }
@@ -52,9 +84,20 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
   });
 
   // 2. Accept Call
-  socket.on('call:accept', ({ callId, callerId }) => {
+  socket.on('call:accept', async ({ callId, callerId }) => {
     try {
       if (!callId || !callerId) return;
+
+      const callData = activeCalls.get(callId);
+      if (callData) {
+        callData.connectedAt = new Date();
+      }
+
+      await CallLog.updateOne(
+        { callId },
+        { $set: { status: 'completed' } }
+      );
+
       io.to(`user:${callerId}`).emit('call:accepted', {
         callId,
         recipientId: currentUserId,
@@ -66,9 +109,16 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
   });
 
   // 3. Reject Call
-  socket.on('call:reject', ({ callId, callerId, reason = 'declined' }) => {
+  socket.on('call:reject', async ({ callId, callerId, reason = 'declined' }) => {
     try {
       if (!callId || !callerId) return;
+
+      activeCalls.delete(callId);
+      await CallLog.updateOne(
+        { callId },
+        { $set: { status: 'rejected', endedAt: new Date() } }
+      );
+
       io.to(`user:${callerId}`).emit('call:rejected', {
         callId,
         recipientId: currentUserId,
@@ -95,9 +145,40 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
   });
 
   // 5. End Call
-  socket.on('call:end', ({ callId, recipientId }) => {
+  socket.on('call:end', async ({ callId, recipientId, duration = 0 }) => {
     try {
       if (!callId) return;
+
+      const callData = activeCalls.get(callId);
+      const endedAt = new Date();
+
+      let calculatedDuration = duration;
+      let finalStatus: 'completed' | 'cancelled' | 'missed' = 'cancelled';
+
+      if (callData) {
+        if (callData.connectedAt) {
+          calculatedDuration = Math.max(
+            duration,
+            Math.floor((endedAt.getTime() - callData.connectedAt.getTime()) / 1000)
+          );
+          finalStatus = 'completed';
+        } else if (callData.callerId === currentUserId) {
+          finalStatus = 'cancelled';
+        }
+        activeCalls.delete(callId);
+      }
+
+      await CallLog.updateOne(
+        { callId },
+        {
+          $set: {
+            duration: calculatedDuration,
+            endedAt,
+            status: finalStatus,
+          },
+        }
+      );
+
       if (recipientId) {
         io.to(`user:${recipientId}`).emit('call:ended', {
           callId,
@@ -105,7 +186,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
         });
       }
       socket.emit('call:ended', { callId, endedBy: currentUserId });
-      logger.info(`📞 Call ended (callId: ${callId}) by ${currentUserId}`);
+      logger.info(`📞 Call ended (callId: ${callId}) duration: ${calculatedDuration}s`);
     } catch (err) {
       logger.error({ err }, 'Error in call:end');
     }

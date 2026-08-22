@@ -11,6 +11,7 @@ import { usersRoutes } from './modules/users/users.routes';
 import { conversationsRoutes } from './modules/conversations/conversations.routes';
 import { messagesRoutes } from './modules/messages/messages.routes';
 import { mediaRoutes } from './modules/media/media.routes';
+import callsRoutes from './modules/calls/calls.routes';
 
 export function createApp() {
   const app = express();
@@ -79,6 +80,7 @@ export function createApp() {
   apiRouter.use('/conversations', conversationsRoutes);
   apiRouter.use('/', messagesRoutes);
   apiRouter.use('/media', mediaRoutes);
+  apiRouter.use('/calls', callsRoutes);
 
   app.use('/api/v1', apiRouter);
 

@@ -4,7 +4,7 @@ import { useUIStore } from '../../../shared/store/uiStore';
 import { Avatar } from '../../../shared/components/Avatar';
 import { Button } from '../../../shared/components/Button';
 import { Input } from '../../../shared/components/Input';
-import { ArrowLeft, Moon, Sun, Monitor, Shield, User as UserIcon, Check } from 'lucide-react';
+import { ArrowLeft, Moon, Sun, Monitor, Shield, User as UserIcon, Check, MessageSquare, Phone, Settings as SettingsIcon } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
   const { user, updateProfile, logout } = useAuthStore();
@@ -180,11 +180,38 @@ export const SettingsPage: React.FC = () => {
         </div>
 
         {/* Sign Out Button */}
-        <div className="pt-2">
+        <div className="pt-2 pb-6">
           <Button variant="danger" size="lg" className="w-full" onClick={() => logout()}>
             Sign Out
           </Button>
         </div>
+      </div>
+
+      {/* Bottom Navigation Bar */}
+      <div className="flex items-center justify-around py-2 bg-surface-elevated border-t border-border-subtle flex-shrink-0">
+        <button
+          onClick={() => setMobileTab('chats')}
+          className="flex flex-col items-center space-y-1 py-1 px-4 text-text-tertiary hover:text-text-primary transition-colors"
+        >
+          <MessageSquare size={20} />
+          <span className="text-[10px]">Chats</span>
+        </button>
+
+        <button
+          onClick={() => setMobileTab('calls')}
+          className="flex flex-col items-center space-y-1 py-1 px-4 text-text-tertiary hover:text-text-primary transition-colors"
+        >
+          <Phone size={20} />
+          <span className="text-[10px]">Calls</span>
+        </button>
+
+        <button
+          onClick={() => setMobileTab('settings')}
+          className="flex flex-col items-center space-y-1 py-1 px-4 text-accent-500 font-semibold transition-colors"
+        >
+          <SettingsIcon size={20} />
+          <span className="text-[10px]">Settings</span>
+        </button>
       </div>
     </div>
   );
