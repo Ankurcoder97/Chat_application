@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
+import { Types } from 'mongoose';
 import { AuthenticatedSocket } from '../socket.server';
 import { User } from '../../modules/users/user.model';
 import { CallLog } from '../../modules/calls/callLog.model';
@@ -24,7 +25,8 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
   // 1. Initiate Call
   socket.on('call:initiate', async ({ recipientId, callType = 'voice' }, callback) => {
     try {
-      if (!recipientId) {
+      const targetId = typeof recipientId === 'object' ? (recipientId.id || recipientId._id) : recipientId;
+      if (!targetId) {
         if (typeof callback === 'function') callback({ error: 'Recipient is required' });
         return;
       }
@@ -38,45 +40,50 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
       const callId = uuidv4();
       const now = new Date();
 
-      // Track active call
+      // Track active call in memory
       activeCalls.set(callId, {
         startedAt: now,
-        callerId: currentUserId,
-        recipientId,
+        callerId: currentUserId.toString(),
+        recipientId: targetId.toString(),
         callType,
-      });
-
-      // Create initial CallLog document
-      await CallLog.create({
-        callId,
-        callerId: currentUserId,
-        recipientId,
-        callType,
-        status: 'missed',
-        duration: 0,
-        startedAt: now,
       });
 
       const callPayload = {
         callId,
         caller: {
-          id: currentUserId,
+          id: currentUserId.toString(),
           name: caller.name,
           username: caller.username,
           avatarUrl: caller.avatarUrl,
         },
-        recipientId,
+        recipientId: targetId.toString(),
         callType, // 'voice' | 'video'
         startedAt: now.toISOString(),
       };
 
+      // Acknowledge caller immediately
       if (typeof callback === 'function') {
         callback({ success: true, callId });
       }
 
-      // Emit incoming call to recipient's devices
-      io.to(`user:${recipientId}`).emit('call:incoming', callPayload);
-      logger.info(`📞 Call initiated [${callType}] by ${currentUserId} to ${recipientId} (callId: ${callId})`);
+      // Emit incoming call to recipient's socket room
+      io.to(`user:${targetId}`).emit('call:incoming', callPayload);
+      logger.info(`📞 Call initiated [${callType}] by ${currentUserId} to ${targetId} (callId: ${callId})`);
+
+      // Persist initial CallLog asynchronously
+      try {
+        await CallLog.create({
+          callId,
+          callerId: new Types.ObjectId(currentUserId),
+          recipientId: new Types.ObjectId(targetId),
+          callType,
+          status: 'missed',
+          duration: 0,
+          startedAt: now,
+        });
+      } catch (dbErr) {
+        logger.error({ dbErr }, 'Error saving initial CallLog');
+      }
     } catch (err: any) {
       logger.error({ err }, 'Error in call:initiate');
       if (typeof callback === 'function') callback({ error: err.message });
@@ -86,23 +93,25 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
   // 2. Accept Call
   socket.on('call:accept', async ({ callId, callerId }) => {
     try {
-      if (!callId || !callerId) return;
+      const targetCallerId = typeof callerId === 'object' ? (callerId.id || callerId._id) : callerId;
+      if (!callId || !targetCallerId) return;
 
       const callData = activeCalls.get(callId);
       if (callData) {
         callData.connectedAt = new Date();
       }
 
-      await CallLog.updateOne(
-        { callId },
-        { $set: { status: 'completed' } }
-      );
-
-      io.to(`user:${callerId}`).emit('call:accepted', {
+      io.to(`user:${targetCallerId}`).emit('call:accepted', {
         callId,
-        recipientId: currentUserId,
+        recipientId: currentUserId.toString(),
       });
       logger.info(`📞 Call accepted (callId: ${callId}) by ${currentUserId}`);
+
+      try {
+        await CallLog.updateOne({ callId }, { $set: { status: 'completed' } });
+      } catch (dbErr) {
+        logger.error({ dbErr }, 'Error updating CallLog to completed');
+      }
     } catch (err) {
       logger.error({ err }, 'Error in call:accept');
     }
@@ -111,20 +120,23 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
   // 3. Reject Call
   socket.on('call:reject', async ({ callId, callerId, reason = 'declined' }) => {
     try {
-      if (!callId || !callerId) return;
+      const targetCallerId = typeof callerId === 'object' ? (callerId.id || callerId._id) : callerId;
+      if (!callId || !targetCallerId) return;
 
       activeCalls.delete(callId);
-      await CallLog.updateOne(
-        { callId },
-        { $set: { status: 'rejected', endedAt: new Date() } }
-      );
 
-      io.to(`user:${callerId}`).emit('call:rejected', {
+      io.to(`user:${targetCallerId}`).emit('call:rejected', {
         callId,
-        recipientId: currentUserId,
+        recipientId: currentUserId.toString(),
         reason,
       });
       logger.info(`📞 Call rejected (callId: ${callId}) by ${currentUserId}`);
+
+      try {
+        await CallLog.updateOne({ callId }, { $set: { status: 'rejected', endedAt: new Date() } });
+      } catch (dbErr) {
+        logger.error({ dbErr }, 'Error updating CallLog to rejected');
+      }
     } catch (err) {
       logger.error({ err }, 'Error in call:reject');
     }
@@ -133,10 +145,12 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
   // 4. WebRTC Signaling (SDP Offer/Answer & ICE candidates)
   socket.on('call:signal', ({ callId, recipientId, signalData }) => {
     try {
-      if (!recipientId || !signalData) return;
-      io.to(`user:${recipientId}`).emit('call:signal', {
+      const targetId = typeof recipientId === 'object' ? (recipientId.id || recipientId._id) : recipientId;
+      if (!targetId || !signalData) return;
+
+      io.to(`user:${targetId}`).emit('call:signal', {
         callId,
-        senderId: currentUserId,
+        senderId: currentUserId.toString(),
         signalData,
       });
     } catch (err) {
@@ -149,6 +163,7 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
     try {
       if (!callId) return;
 
+      const targetId = recipientId ? (typeof recipientId === 'object' ? (recipientId.id || recipientId._id) : recipientId) : null;
       const callData = activeCalls.get(callId);
       const endedAt = new Date();
 
@@ -162,31 +177,35 @@ export function registerCallHandlers(io: SocketIOServer, socket: AuthenticatedSo
             Math.floor((endedAt.getTime() - callData.connectedAt.getTime()) / 1000)
           );
           finalStatus = 'completed';
-        } else if (callData.callerId === currentUserId) {
+        } else if (callData.callerId === currentUserId.toString()) {
           finalStatus = 'cancelled';
         }
         activeCalls.delete(callId);
       }
 
-      await CallLog.updateOne(
-        { callId },
-        {
-          $set: {
-            duration: calculatedDuration,
-            endedAt,
-            status: finalStatus,
-          },
-        }
-      );
-
-      if (recipientId) {
-        io.to(`user:${recipientId}`).emit('call:ended', {
+      if (targetId) {
+        io.to(`user:${targetId}`).emit('call:ended', {
           callId,
-          endedBy: currentUserId,
+          endedBy: currentUserId.toString(),
         });
       }
-      socket.emit('call:ended', { callId, endedBy: currentUserId });
+      socket.emit('call:ended', { callId, endedBy: currentUserId.toString() });
       logger.info(`📞 Call ended (callId: ${callId}) duration: ${calculatedDuration}s`);
+
+      try {
+        await CallLog.updateOne(
+          { callId },
+          {
+            $set: {
+              duration: calculatedDuration,
+              endedAt,
+              status: finalStatus,
+            },
+          }
+        );
+      } catch (dbErr) {
+        logger.error({ dbErr }, 'Error updating CallLog on end');
+      }
     } catch (err) {
       logger.error({ err }, 'Error in call:end');
     }

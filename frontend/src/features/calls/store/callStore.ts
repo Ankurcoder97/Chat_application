@@ -52,7 +52,20 @@ export const useCallStore = create<CallState>((set, get) => {
     isVideoEnabled: true,
     incomingOfferSdp: null,
 
-    startOutgoingCall: async (peer, callType) => {
+    startOutgoingCall: async (peer: any, callType) => {
+      const peerId = (peer?.id || peer?._id || '').toString();
+      if (!peerId) {
+        console.error('Cannot start call: invalid peer ID', peer);
+        return;
+      }
+
+      const normalizedPeer: CallPeer = {
+        id: peerId,
+        name: peer.name || 'User',
+        username: peer.username,
+        avatarUrl: peer.avatarUrl,
+      };
+
       ringtone.playOutgoing();
 
       // Acquire media immediately so local preview is visible
@@ -65,14 +78,14 @@ export const useCallStore = create<CallState>((set, get) => {
       const socket = getSocket();
       socket?.emit(
         'call:initiate',
-        { recipientId: peer.id, callType },
+        { recipientId: peerId, callType },
         (res: any) => {
           if (res?.success) {
             set({
               callStatus: 'calling',
               callType,
               callId: res.callId,
-              peer,
+              peer: normalizedPeer,
               duration: 0,
               isMuted: false,
               isVideoEnabled: callType === 'video',
