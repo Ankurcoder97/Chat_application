@@ -35,23 +35,23 @@ export const CallModal: React.FC = () => {
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Stable stream attachment for local video (prevents re-attachment blinking)
+  // Stable stream attachment for local video
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       if (localVideoRef.current.srcObject !== localStream) {
         localVideoRef.current.srcObject = localStream;
-        localVideoRef.current.play().catch(() => {});
       }
+      localVideoRef.current.play().catch(() => {});
     }
   }, [localStream, callStatus]);
 
-  // Stable stream attachment for remote video (prevents re-attachment blinking)
+  // Stable stream attachment for remote video
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       if (remoteVideoRef.current.srcObject !== remoteStream) {
         remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current.play().catch(() => {});
       }
+      remoteVideoRef.current.play().catch(() => {});
     }
   }, [remoteStream, callStatus]);
 
@@ -60,8 +60,8 @@ export const CallModal: React.FC = () => {
     if (remoteAudioRef.current && remoteStream) {
       if (remoteAudioRef.current.srcObject !== remoteStream) {
         remoteAudioRef.current.srcObject = remoteStream;
-        remoteAudioRef.current.play().catch(() => {});
       }
+      remoteAudioRef.current.play().catch(() => {});
     }
   }, [remoteStream, callStatus]);
 
@@ -72,7 +72,17 @@ export const CallModal: React.FC = () => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 select-none">
       {/* Hidden audio element for voice streaming across all call types */}
-      <audio ref={remoteAudioRef} autoPlay playsInline />
+      <audio
+        ref={(el) => {
+          remoteAudioRef.current = el;
+          if (el && remoteStream && el.srcObject !== remoteStream) {
+            el.srcObject = remoteStream;
+            el.play().catch(() => {});
+          }
+        }}
+        autoPlay
+        playsInline
+      />
 
       {/* 1. INCOMING CALL SCREEN */}
       {callStatus === 'incoming' && (
@@ -157,7 +167,13 @@ export const CallModal: React.FC = () => {
             <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
               {/* Fullscreen Remote Video */}
               <video
-                ref={remoteVideoRef}
+                ref={(el) => {
+                  remoteVideoRef.current = el;
+                  if (el && remoteStream && el.srcObject !== remoteStream) {
+                    el.srcObject = remoteStream;
+                    el.play().catch(() => {});
+                  }
+                }}
                 autoPlay
                 playsInline
                 className="w-full h-full object-cover"
@@ -166,7 +182,13 @@ export const CallModal: React.FC = () => {
               {/* Picture-in-Picture Local Video */}
               <div className="absolute top-4 right-4 w-24 sm:w-36 h-36 sm:h-48 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 z-20 bg-surface-elevated">
                 <video
-                  ref={localVideoRef}
+                  ref={(el) => {
+                    localVideoRef.current = el;
+                    if (el && localStream && el.srcObject !== localStream) {
+                      el.srcObject = localStream;
+                      el.play().catch(() => {});
+                    }
+                  }}
                   autoPlay
                   playsInline
                   muted

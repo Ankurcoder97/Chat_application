@@ -74,10 +74,6 @@ export class WebRTCManager {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     this.peerConnection = pc;
 
-    // Initialize remote stream container
-    const remote = new MediaStream();
-    this.remoteStream = remote;
-
     // Attach local tracks if already available
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
@@ -88,18 +84,19 @@ export class WebRTCManager {
     // Handle incoming remote tracks
     pc.ontrack = (event) => {
       console.log('🎥 Remote track received:', event.track.kind, event.track.id);
-      if (!this.remoteStream) {
-        this.remoteStream = new MediaStream();
+      
+      let tracks: MediaStreamTrack[] = [];
+      if (this.remoteStream) {
+        tracks = this.remoteStream.getTracks().filter((t) => t.id !== event.track.id);
       }
-
-      if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
-        this.remoteStream.addTrack(event.track);
-      }
+      tracks.push(event.track);
 
       // Create new MediaStream instance so React/Zustand state detects change
-      const updatedStream = new MediaStream(this.remoteStream.getTracks());
+      const newMediaStream = new MediaStream(tracks);
+      this.remoteStream = newMediaStream;
+
       if (this.onRemoteStreamCallback) {
-        this.onRemoteStreamCallback(updatedStream);
+        this.onRemoteStreamCallback(newMediaStream);
       }
     };
 
@@ -221,7 +218,6 @@ export class WebRTCManager {
             console.error('Error adding ICE candidate', err);
           }
         } else {
-          // Queue candidate safely even if peerConnection is not yet initialized
           this.pendingCandidates.push(signalData.candidate);
         }
       }
