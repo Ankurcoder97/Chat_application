@@ -165,17 +165,18 @@ export const CallModal: React.FC = () => {
           {/* VIDEO CALL LAYOUT */}
           {callType === 'video' ? (
             <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
-              {/* Fullscreen Remote Video */}
+              {/* Fullscreen Remote Video (muted to bypass mobile autoplay blocking, audio is played via dedicated audio element) */}
               <video
                 ref={(el) => {
                   remoteVideoRef.current = el;
                   if (el && remoteStream && el.srcObject !== remoteStream) {
                     el.srcObject = remoteStream;
-                    el.play().catch(() => {});
+                    el.play().catch((e) => console.log('Remote video play:', e));
                   }
                 }}
                 autoPlay
                 playsInline
+                muted
                 className="w-full h-full object-cover"
               />
 

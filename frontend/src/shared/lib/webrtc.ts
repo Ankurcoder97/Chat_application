@@ -85,29 +85,43 @@ export class WebRTCManager {
     pc.ontrack = (event) => {
       console.log('🎥 Remote track received:', event.track.kind, event.track.id);
       
-      let tracks: MediaStreamTrack[] = [];
-      if (this.remoteStream) {
-        tracks = this.remoteStream.getTracks().filter((t) => t.id !== event.track.id);
+      let streamToUse: MediaStream;
+      if (event.streams && event.streams[0]) {
+        streamToUse = event.streams[0];
+      } else {
+        if (!this.remoteStream) {
+          this.remoteStream = new MediaStream();
+        }
+        if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
+          this.remoteStream.addTrack(event.track);
+        }
+        streamToUse = this.remoteStream;
       }
-      tracks.push(event.track);
-
-      // Create new MediaStream instance so React/Zustand state detects change
-      const newMediaStream = new MediaStream(tracks);
-      this.remoteStream = newMediaStream;
+      this.remoteStream = streamToUse;
 
       if (this.onRemoteStreamCallback) {
-        this.onRemoteStreamCallback(newMediaStream);
+        this.onRemoteStreamCallback(streamToUse);
       }
     };
 
     // Forward ICE candidates to peer
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        const candidatePayload =
+          typeof event.candidate.toJSON === 'function'
+            ? event.candidate.toJSON()
+            : {
+                candidate: event.candidate.candidate,
+                sdpMid: event.candidate.sdpMid,
+                sdpMLineIndex: event.candidate.sdpMLineIndex,
+                usernameFragment: event.candidate.usernameFragment,
+              };
+
         const socket = getSocket();
         socket?.emit('call:signal', {
           callId,
           recipientId: peerId,
-          signalData: { type: 'candidate', candidate: event.candidate.toJSON() },
+          signalData: { type: 'candidate', candidate: candidatePayload },
         });
       }
     };
