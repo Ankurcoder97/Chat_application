@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Production real-time messaging server for Nexus",
   "main": "dist/server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only --exit-child src/server.ts",
     "build": "tsc",
