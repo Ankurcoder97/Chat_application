@@ -174,6 +174,15 @@ export const CallModal: React.FC = () => {
                 className="w-full h-full object-cover"
               />
 
+              {/* Connecting placeholder if remote video track hasn't arrived yet */}
+              {(!remoteStream || remoteStream.getVideoTracks().length === 0) && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900/90 text-white z-10 p-6 text-center">
+                  <Avatar name={peerName} avatarUrl={peer?.avatarUrl} size="xl" className="shadow-2xl mb-4" />
+                  <h3 className="text-base font-semibold">{peerName}</h3>
+                  <p className="text-xs text-text-tertiary mt-1 animate-pulse">Connecting video stream...</p>
+                </div>
+              )}
+
               {/* Picture-in-Picture Local Video */}
               <div className="absolute top-4 right-4 w-24 sm:w-36 h-36 sm:h-48 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 z-20 bg-surface-elevated">
                 <video
