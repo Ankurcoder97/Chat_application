@@ -25,7 +25,32 @@ export const CallModal: React.FC = () => {
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Attach local stream to video element
+  // Callback ref binders for immediate DOM stream binding
+  const bindLocalVideo = (el: HTMLVideoElement | null) => {
+    localVideoRef.current = el;
+    if (el && localStream) {
+      el.srcObject = localStream;
+      el.play().catch(() => {});
+    }
+  };
+
+  const bindRemoteVideo = (el: HTMLVideoElement | null) => {
+    remoteVideoRef.current = el;
+    if (el && remoteStream) {
+      el.srcObject = remoteStream;
+      el.play().catch(() => {});
+    }
+  };
+
+  const bindRemoteAudio = (el: HTMLAudioElement | null) => {
+    remoteAudioRef.current = el;
+    if (el && remoteStream) {
+      el.srcObject = remoteStream;
+      el.play().catch(() => {});
+    }
+  };
+
+  // Re-attach local stream whenever it changes
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
@@ -33,7 +58,7 @@ export const CallModal: React.FC = () => {
     }
   }, [localStream, callStatus, callType]);
 
-  // Attach remote stream to video & audio elements
+  // Re-attach remote stream whenever it changes
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
@@ -57,8 +82,8 @@ export const CallModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md select-none animate-message-in">
-      {/* Hidden audio element for voice streaming in all call types */}
-      <audio ref={remoteAudioRef} autoPlay playsInline />
+      {/* Hidden audio element for voice streaming across all call types */}
+      <audio ref={bindRemoteAudio} autoPlay playsInline />
 
       {/* 1. INCOMING CALL SCREEN */}
       {callStatus === 'incoming' && (
@@ -143,7 +168,7 @@ export const CallModal: React.FC = () => {
             <div className="relative w-full h-full flex items-center justify-center bg-black">
               {/* Fullscreen Remote Video */}
               <video
-                ref={remoteVideoRef}
+                ref={bindRemoteVideo}
                 autoPlay
                 playsInline
                 className="w-full h-full object-cover"
@@ -152,7 +177,7 @@ export const CallModal: React.FC = () => {
               {/* Picture-in-Picture Local Video */}
               <div className="absolute top-4 right-4 w-24 sm:w-36 h-36 sm:h-48 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 z-20 bg-surface-elevated">
                 <video
-                  ref={localVideoRef}
+                  ref={bindLocalVideo}
                   autoPlay
                   playsInline
                   muted

@@ -7,7 +7,10 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.services.mozilla.com' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 export class WebRTCManager {
@@ -29,8 +32,15 @@ export class WebRTCManager {
 
   // Get local audio and/or video stream
   public async getLocalMedia(callType: 'voice' | 'video'): Promise<MediaStream> {
-    if (this.localStream) {
-      return this.localStream;
+    if (this.localStream && this.localStream.active) {
+      // Check if we already have the necessary tracks
+      const hasVideo = this.localStream.getVideoTracks().length > 0;
+      if (callType === 'video' && !hasVideo) {
+        // Upgrade to video
+        this.cleanup();
+      } else {
+        return this.localStream;
+      }
     }
 
     const constraints: MediaStreamConstraints = {
@@ -62,6 +72,7 @@ export class WebRTCManager {
       return this.peerConnection;
     }
 
+    console.log('⚡ Initializing RTCPeerConnection for call:', callId, 'peer:', peerId);
     const pc = new RTCPeerConnection(RTC_CONFIG);
     this.peerConnection = pc;
     this.pendingCandidates = [];
@@ -77,15 +88,20 @@ export class WebRTCManager {
       });
     }
 
-    // Handle incoming remote tracks
+    // Handle incoming remote tracks (Always add track to remote stream)
     pc.ontrack = (event) => {
-      event.streams[0]?.getTracks().forEach((track) => {
-        if (!remote.getTracks().some((t) => t.id === track.id)) {
-          remote.addTrack(track);
-        }
-      });
+      console.log('🎥 Remote track received:', event.track.kind, event.track.id);
+      if (!this.remoteStream) {
+        this.remoteStream = new MediaStream();
+      }
+      
+      // Add track if not already in remote stream
+      if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
+        this.remoteStream.addTrack(event.track);
+      }
+
       if (this.onRemoteStreamCallback) {
-        this.onRemoteStreamCallback(remote);
+        this.onRemoteStreamCallback(this.remoteStream);
       }
     };
 
@@ -101,8 +117,12 @@ export class WebRTCManager {
       }
     };
 
+    pc.oniceconnectionstatechange = () => {
+      console.log('📡 ICE Connection State:', pc.iceConnectionState);
+    };
+
     pc.onconnectionstatechange = () => {
-      console.log('WebRTC Connection State:', pc.connectionState);
+      console.log('🔗 Peer Connection State:', pc.connectionState);
     };
 
     return pc;
@@ -110,29 +130,35 @@ export class WebRTCManager {
 
   // Caller creates and sends WebRTC Offer
   public async createOffer(callId: string, recipientId: string, callType: 'voice' | 'video') {
-    const stream = await this.getLocalMedia(callType);
-    const pc = this.initPeerConnection(callId, recipientId);
+    try {
+      console.log('📞 Creating WebRTC Offer for:', recipientId);
+      const stream = await this.getLocalMedia(callType);
+      const pc = this.initPeerConnection(callId, recipientId);
 
-    // Ensure tracks are added
-    stream.getTracks().forEach((track) => {
-      const senders = pc.getSenders();
-      if (!senders.some((s) => s.track?.id === track.id)) {
-        pc.addTrack(track, stream);
-      }
-    });
+      // Ensure local tracks are attached to peer connection
+      stream.getTracks().forEach((track) => {
+        const senders = pc.getSenders();
+        if (!senders.some((s) => s.track?.id === track.id)) {
+          pc.addTrack(track, stream);
+        }
+      });
 
-    const offer = await pc.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: callType === 'video',
-    });
-    await pc.setLocalDescription(offer);
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: callType === 'video',
+      });
+      await pc.setLocalDescription(offer);
 
-    const socket = getSocket();
-    socket?.emit('call:signal', {
-      callId,
-      recipientId,
-      signalData: { type: 'offer', sdp: offer },
-    });
+      const socket = getSocket();
+      socket?.emit('call:signal', {
+        callId,
+        recipientId,
+        signalData: { type: 'offer', sdp: offer },
+      });
+      console.log('📤 WebRTC Offer sent successfully');
+    } catch (err) {
+      console.error('Error creating WebRTC offer:', err);
+    }
   }
 
   // Recipient handles Offer and creates Answer
@@ -142,51 +168,59 @@ export class WebRTCManager {
     offerSdp: RTCSessionDescriptionInit,
     callType: 'voice' | 'video'
   ) {
-    const stream = await this.getLocalMedia(callType);
-    const pc = this.initPeerConnection(callId, callerId);
+    try {
+      console.log('📥 Handling WebRTC Offer from:', callerId);
+      const stream = await this.getLocalMedia(callType);
+      const pc = this.initPeerConnection(callId, callerId);
 
-    // Ensure local tracks are added
-    stream.getTracks().forEach((track) => {
-      const senders = pc.getSenders();
-      if (!senders.some((s) => s.track?.id === track.id)) {
-        pc.addTrack(track, stream);
-      }
-    });
+      // Ensure local tracks are attached to peer connection
+      stream.getTracks().forEach((track) => {
+        const senders = pc.getSenders();
+        if (!senders.some((s) => s.track?.id === track.id)) {
+          pc.addTrack(track, stream);
+        }
+      });
 
-    await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
+      await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
+      console.log('✅ Remote Description (Offer) set');
 
-    // Drain queued ICE candidates
-    await this.drainPendingCandidates();
+      // Drain queued ICE candidates
+      await this.drainPendingCandidates();
 
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
 
-    const socket = getSocket();
-    socket?.emit('call:signal', {
-      callId,
-      recipientId: callerId,
-      signalData: { type: 'answer', sdp: answer },
-    });
+      const socket = getSocket();
+      socket?.emit('call:signal', {
+        callId,
+        recipientId: callerId,
+        signalData: { type: 'answer', sdp: answer },
+      });
+      console.log('📤 WebRTC Answer sent successfully');
+    } catch (err) {
+      console.error('Error handling WebRTC offer/answer:', err);
+    }
   }
 
   // Handle incoming signals (SDP Answer or ICE Candidate)
   public async handleSignal(signalData: any) {
     if (!this.peerConnection) return;
 
-    if (signalData.type === 'answer' && signalData.sdp) {
-      await this.peerConnection.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
-      await this.drainPendingCandidates();
-    } else if (signalData.type === 'candidate' && signalData.candidate) {
-      const candidate = new RTCIceCandidate(signalData.candidate);
-      if (this.peerConnection.remoteDescription) {
-        try {
+    try {
+      if (signalData.type === 'answer' && signalData.sdp) {
+        console.log('📥 Received WebRTC Answer, setting Remote Description');
+        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
+        await this.drainPendingCandidates();
+      } else if (signalData.type === 'candidate' && signalData.candidate) {
+        const candidate = new RTCIceCandidate(signalData.candidate);
+        if (this.peerConnection.remoteDescription && this.peerConnection.remoteDescription.type) {
           await this.peerConnection.addIceCandidate(candidate);
-        } catch (err) {
-          console.error('Error adding ICE candidate', err);
+        } else {
+          this.pendingCandidates.push(signalData.candidate);
         }
-      } else {
-        this.pendingCandidates.push(signalData.candidate);
       }
+    } catch (err) {
+      console.error('Error in handleSignal:', err);
     }
   }
 
@@ -221,6 +255,7 @@ export class WebRTCManager {
   }
 
   public cleanup() {
+    console.log('🧹 Cleaning up WebRTC Manager');
     this.pendingCandidates = [];
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => track.stop());
