@@ -33,10 +33,8 @@ export class WebRTCManager {
   // Get local audio and/or video stream
   public async getLocalMedia(callType: 'voice' | 'video'): Promise<MediaStream> {
     if (this.localStream && this.localStream.active) {
-      // Check if we already have the necessary tracks
       const hasVideo = this.localStream.getVideoTracks().length > 0;
       if (callType === 'video' && !hasVideo) {
-        // Upgrade to video
         this.cleanup();
       } else {
         return this.localStream;
@@ -75,9 +73,8 @@ export class WebRTCManager {
     console.log('⚡ Initializing RTCPeerConnection for call:', callId, 'peer:', peerId);
     const pc = new RTCPeerConnection(RTC_CONFIG);
     this.peerConnection = pc;
-    this.pendingCandidates = [];
 
-    // Create a new remote MediaStream
+    // Initialize remote stream container
     const remote = new MediaStream();
     this.remoteStream = remote;
 
@@ -88,20 +85,21 @@ export class WebRTCManager {
       });
     }
 
-    // Handle incoming remote tracks on the persistent remoteStream
+    // Handle incoming remote tracks
     pc.ontrack = (event) => {
       console.log('🎥 Remote track received:', event.track.kind, event.track.id);
       if (!this.remoteStream) {
         this.remoteStream = new MediaStream();
       }
-      
-      // Add track if not already in remote stream
+
       if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
         this.remoteStream.addTrack(event.track);
       }
 
+      // Create new MediaStream instance so React/Zustand state detects change
+      const updatedStream = new MediaStream(this.remoteStream.getTracks());
       if (this.onRemoteStreamCallback) {
-        this.onRemoteStreamCallback(this.remoteStream);
+        this.onRemoteStreamCallback(updatedStream);
       }
     };
 
@@ -204,18 +202,26 @@ export class WebRTCManager {
 
   // Handle incoming signals (SDP Answer or ICE Candidate)
   public async handleSignal(signalData: any) {
-    if (!this.peerConnection) return;
-
     try {
       if (signalData.type === 'answer' && signalData.sdp) {
-        console.log('📥 Received WebRTC Answer, setting Remote Description');
-        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
-        await this.drainPendingCandidates();
+        if (this.peerConnection) {
+          console.log('📥 Received WebRTC Answer, setting Remote Description');
+          await this.peerConnection.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
+          await this.drainPendingCandidates();
+        }
       } else if (signalData.type === 'candidate' && signalData.candidate) {
-        const candidate = new RTCIceCandidate(signalData.candidate);
-        if (this.peerConnection.remoteDescription && this.peerConnection.remoteDescription.type) {
-          await this.peerConnection.addIceCandidate(candidate);
+        if (
+          this.peerConnection &&
+          this.peerConnection.remoteDescription &&
+          this.peerConnection.remoteDescription.type
+        ) {
+          try {
+            await this.peerConnection.addIceCandidate(new RTCIceCandidate(signalData.candidate));
+          } catch (err) {
+            console.error('Error adding ICE candidate', err);
+          }
         } else {
+          // Queue candidate safely even if peerConnection is not yet initialized
           this.pendingCandidates.push(signalData.candidate);
         }
       }
@@ -226,14 +232,13 @@ export class WebRTCManager {
 
   private async drainPendingCandidates() {
     if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
-    while (this.pendingCandidates.length > 0) {
-      const candidate = this.pendingCandidates.shift();
-      if (candidate) {
-        try {
-          await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-          console.error('Error adding queued ICE candidate', err);
-        }
+    const candidates = [...this.pendingCandidates];
+    this.pendingCandidates = [];
+    for (const candidate of candidates) {
+      try {
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.error('Error adding queued ICE candidate', err);
       }
     }
   }
