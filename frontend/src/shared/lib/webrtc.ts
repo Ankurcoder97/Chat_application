@@ -88,7 +88,7 @@ export class WebRTCManager {
       });
     }
 
-    // Handle incoming remote tracks (Always create fresh MediaStream reference for React re-render)
+    // Handle incoming remote tracks on the persistent remoteStream
     pc.ontrack = (event) => {
       console.log('🎥 Remote track received:', event.track.kind, event.track.id);
       if (!this.remoteStream) {
@@ -100,12 +100,8 @@ export class WebRTCManager {
         this.remoteStream.addTrack(event.track);
       }
 
-      // Create new MediaStream instance so React/Zustand state detects change
-      const freshStream = new MediaStream(this.remoteStream.getTracks());
-      this.remoteStream = freshStream;
-
       if (this.onRemoteStreamCallback) {
-        this.onRemoteStreamCallback(freshStream);
+        this.onRemoteStreamCallback(this.remoteStream);
       }
     };
 

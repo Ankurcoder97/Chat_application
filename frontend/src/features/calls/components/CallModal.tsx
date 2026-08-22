@@ -70,7 +70,7 @@ export const CallModal: React.FC = () => {
   const peerName = peer?.name || 'Unknown User';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md select-none animate-message-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 select-none">
       {/* Hidden audio element for voice streaming across all call types */}
       <audio ref={remoteAudioRef} autoPlay playsInline />
 
