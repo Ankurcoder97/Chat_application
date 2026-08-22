@@ -71,13 +71,17 @@ export const CallModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 select-none">
-      {/* Hidden audio element for voice streaming across all call types */}
+      {/* Dedicated audio element for voice streaming across all call types */}
       <audio
         ref={(el) => {
           remoteAudioRef.current = el;
-          if (el && remoteStream && el.srcObject !== remoteStream) {
-            el.srcObject = remoteStream;
-            el.play().catch(() => {});
+          if (el && remoteStream) {
+            if (el.srcObject !== remoteStream) {
+              el.srcObject = remoteStream;
+            }
+            el.volume = 1.0;
+            el.muted = false;
+            el.play().catch((e) => console.log('Remote audio play:', e));
           }
         }}
         autoPlay

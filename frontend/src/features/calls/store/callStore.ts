@@ -137,8 +137,9 @@ export const useCallStore = create<CallState>((set, get) => {
       await webrtc.getLocalMedia(callType);
 
       // If offer SDP has arrived, process it immediately!
-      if (incomingOfferSdp) {
-        await webrtc.handleOfferAndAnswer(callId, peer.id, incomingOfferSdp, callType);
+      const currentOffer = get().incomingOfferSdp || incomingOfferSdp;
+      if (currentOffer) {
+        await webrtc.handleOfferAndAnswer(callId, peer.id, currentOffer, callType);
       }
     },
 

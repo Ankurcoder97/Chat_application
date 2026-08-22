@@ -9,6 +9,16 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.services.mozilla.com' },
     { urls: 'stun:global.stun.twilio.com:3478' },
+    // Open TURN relay server for symmetric cellular 4G/5G NAT traversal
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelay',
+      credential: 'openrelay',
+    },
   ],
   iceCandidatePoolSize: 10,
 };
@@ -17,7 +27,7 @@ export class WebRTCManager {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
-  private pendingCandidates: RTCIceCandidateInit[] = [];
+  private pendingCandidates: any[] = [];
 
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
   private onLocalStreamCallback: ((stream: MediaStream) => void) | null = null;
@@ -34,11 +44,12 @@ export class WebRTCManager {
   public async getLocalMedia(callType: 'voice' | 'video'): Promise<MediaStream> {
     if (this.localStream && this.localStream.active) {
       const hasVideo = this.localStream.getVideoTracks().length > 0;
-      if (callType === 'video' && !hasVideo) {
-        this.cleanup();
-      } else {
+      const hasAudio = this.localStream.getAudioTracks().length > 0;
+      if (hasAudio && (callType === 'voice' || hasVideo)) {
         return this.localStream;
       }
+      this.localStream.getTracks().forEach((t) => t.stop());
+      this.localStream = null;
     }
 
     const constraints: MediaStreamConstraints = {
@@ -227,7 +238,9 @@ export class WebRTCManager {
           this.peerConnection.remoteDescription.type
         ) {
           try {
-            await this.peerConnection.addIceCandidate(new RTCIceCandidate(signalData.candidate));
+            if (signalData.candidate.candidate) {
+              await this.peerConnection.addIceCandidate(new RTCIceCandidate(signalData.candidate));
+            }
           } catch (err) {
             console.error('Error adding ICE candidate', err);
           }
@@ -246,7 +259,9 @@ export class WebRTCManager {
     this.pendingCandidates = [];
     for (const candidate of candidates) {
       try {
-        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        if (candidate && candidate.candidate) {
+          await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        }
       } catch (err) {
         console.error('Error adding queued ICE candidate', err);
       }
