@@ -75,6 +75,9 @@ export const useCallStore = create<CallState>((set, get) => {
         console.error('Failed to get media devices', err);
       }
 
+      // Reset WebRTC manager for clean session
+      webrtc.cleanup();
+
       const socket = getSocket();
       socket?.emit(
         'call:initiate',
@@ -89,17 +92,22 @@ export const useCallStore = create<CallState>((set, get) => {
               duration: 0,
               isMuted: false,
               isVideoEnabled: callType === 'video',
+              incomingOfferSdp: null,
+              localStream: null,
+              remoteStream: null,
             });
           } else {
             ringtone.playEndCall();
             webrtc.cleanup();
-            set({ callStatus: 'idle', peer: null, callId: null });
+            set({ callStatus: 'idle', peer: null, callId: null, incomingOfferSdp: null });
           }
         }
       );
     },
 
     receiveIncomingCall: (callId, peer, callType) => {
+      // Reset WebRTC manager for clean session
+      webrtc.cleanup();
       ringtone.playIncoming();
       set({
         callStatus: 'incoming',
@@ -109,6 +117,9 @@ export const useCallStore = create<CallState>((set, get) => {
         duration: 0,
         isMuted: false,
         isVideoEnabled: callType === 'video',
+        incomingOfferSdp: null,
+        localStream: null,
+        remoteStream: null,
       });
     },
 
