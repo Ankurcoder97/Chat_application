@@ -77,7 +77,7 @@ export class WebRTCManager {
   }
 
   private initPeerConnection(callId: string, peerId: string): RTCPeerConnection {
-    if (this.peerConnection) {
+    if (this.peerConnection && this.peerConnection.signalingState !== 'closed') {
       return this.peerConnection;
     }
 
