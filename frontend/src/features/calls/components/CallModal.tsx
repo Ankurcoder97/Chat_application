@@ -23,6 +23,7 @@ export const CallModal: React.FC = () => {
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Attach local stream to video element
   useEffect(() => {
@@ -31,10 +32,14 @@ export const CallModal: React.FC = () => {
     }
   }, [localStream]);
 
-  // Attach remote stream to video element
+  // Attach remote stream to video & audio elements
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+    }
+    if (remoteAudioRef.current && remoteStream) {
+      remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.play().catch(() => {});
     }
   }, [remoteStream]);
 
@@ -50,9 +55,12 @@ export const CallModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md select-none animate-message-in">
+      {/* Hidden audio element for voice streaming in all call types */}
+      <audio ref={remoteAudioRef} autoPlay playsInline />
+
       {/* 1. INCOMING CALL SCREEN */}
       {callStatus === 'incoming' && (
-        <div className="flex flex-col items-center justify-between h-full max-h-[550px] w-full max-w-sm p-8 text-center text-white">
+        <div className="flex flex-col items-center justify-between h-full max-h-[550px] w-full max-w-sm p-6 sm:p-8 text-center text-white">
           <div className="flex flex-col items-center space-y-4 mt-6">
             <div className="relative">
               <span className="absolute inset-0 rounded-full bg-accent-500/30 animate-ping" />
@@ -60,23 +68,23 @@ export const CallModal: React.FC = () => {
             </div>
 
             <div>
-              <h2 className="text-2xl font-bold text-white tracking-tight">{peerName}</h2>
-              <p className="text-sm text-accent-300 font-medium mt-1">
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{peerName}</h2>
+              <p className="text-xs sm:text-sm text-accent-300 font-medium mt-1">
                 Incoming {callType === 'video' ? 'Video' : 'Voice'} Call...
               </p>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-around w-full mt-12 mb-6">
+          <div className="flex items-center justify-around w-full mt-10 mb-6">
             {/* Decline */}
             <div className="flex flex-col items-center space-y-2">
               <button
                 onClick={() => rejectCall('declined')}
-                className="w-16 h-16 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg transition-transform active:scale-95"
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg transition-transform active:scale-95"
                 aria-label="Decline Call"
               >
-                <PhoneOff size={26} />
+                <PhoneOff size={24} />
               </button>
               <span className="text-xs text-white/70">Decline</span>
             </div>
@@ -85,10 +93,10 @@ export const CallModal: React.FC = () => {
             <div className="flex flex-col items-center space-y-2">
               <button
                 onClick={acceptCall}
-                className="w-16 h-16 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-lg transition-transform active:scale-95 animate-bounce"
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-lg transition-transform active:scale-95 animate-bounce"
                 aria-label="Accept Call"
               >
-                <Phone size={26} />
+                <Phone size={24} />
               </button>
               <span className="text-xs text-white/70">Accept</span>
             </div>
@@ -98,7 +106,7 @@ export const CallModal: React.FC = () => {
 
       {/* 2. OUTGOING CALLING SCREEN */}
       {callStatus === 'calling' && (
-        <div className="flex flex-col items-center justify-between h-full max-h-[550px] w-full max-w-sm p-8 text-center text-white">
+        <div className="flex flex-col items-center justify-between h-full max-h-[550px] w-full max-w-sm p-6 sm:p-8 text-center text-white">
           <div className="flex flex-col items-center space-y-4 mt-6">
             <div className="relative">
               <span className="absolute inset-0 rounded-full bg-accent-500/20 animate-pulse" />
@@ -106,20 +114,20 @@ export const CallModal: React.FC = () => {
             </div>
 
             <div>
-              <h2 className="text-2xl font-bold text-white tracking-tight">{peerName}</h2>
-              <p className="text-sm text-accent-300 font-medium mt-1 animate-pulse">
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{peerName}</h2>
+              <p className="text-xs sm:text-sm text-accent-300 font-medium mt-1 animate-pulse">
                 Calling {callType === 'video' ? 'Video' : 'Voice'}...
               </p>
             </div>
           </div>
 
-          <div className="mt-12 mb-6">
+          <div className="mt-10 mb-6">
             <button
               onClick={endCall}
-              className="w-16 h-16 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg transition-transform active:scale-95"
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg transition-transform active:scale-95"
               aria-label="Cancel Call"
             >
-              <PhoneOff size={26} />
+              <PhoneOff size={24} />
             </button>
           </div>
         </div>
@@ -140,7 +148,7 @@ export const CallModal: React.FC = () => {
               />
 
               {/* Picture-in-Picture Local Video */}
-              <div className="absolute top-4 right-4 w-28 sm:w-36 h-40 sm:h-48 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 z-20 bg-surface-elevated">
+              <div className="absolute top-4 right-4 w-24 sm:w-36 h-36 sm:h-48 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 z-20 bg-surface-elevated">
                 <video
                   ref={localVideoRef}
                   autoPlay
@@ -151,28 +159,28 @@ export const CallModal: React.FC = () => {
               </div>
 
               {/* Caller Name & Timer Badge */}
-              <div className="absolute top-6 left-6 z-20 flex items-center space-x-2.5 bg-black/50 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/10 text-white">
-                <span className="text-xs font-semibold">{peerName}</span>
+              <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-20 flex items-center space-x-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-white">
+                <span className="text-xs font-semibold truncate max-w-[120px] sm:max-w-[200px]">{peerName}</span>
                 <span className="text-[11px] font-mono text-emerald-400">{formatTimer(duration)}</span>
               </div>
             </div>
           ) : (
             /* VOICE CALL LAYOUT */
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-white">
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-white">
               <div className="relative mb-6">
-                <div className="w-32 h-32 rounded-full bg-accent-500/20 flex items-center justify-center animate-pulse">
+                <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-accent-500/20 flex items-center justify-center animate-pulse">
                   <Avatar name={peerName} avatarUrl={peer?.avatarUrl} size="xl" className="shadow-2xl" />
                 </div>
               </div>
 
-              <h2 className="text-2xl font-bold text-white tracking-tight">{peerName}</h2>
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{peerName}</h2>
               <span className="mt-2 px-3 py-1 bg-white/10 rounded-full text-xs font-mono text-emerald-400">
                 {formatTimer(duration)}
               </span>
 
               {/* Audio visualizer wave bar */}
               <div className="flex items-center space-x-1.5 mt-8 h-8">
-                {[4, 8, 14, 6, 12, 18, 10, 16, 8, 12].map((height, i) => (
+                {[6, 12, 20, 8, 16, 24, 12, 18, 10, 14].map((height, i) => (
                   <span
                     key={i}
                     style={{ height: `${height}px` }}
@@ -184,17 +192,17 @@ export const CallModal: React.FC = () => {
           )}
 
           {/* Floating In-Call Action Control Bar */}
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-center space-x-4 bg-surface-elevated/90 backdrop-blur-md px-6 py-3.5 rounded-full border border-white/10 shadow-2xl">
+          <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-center space-x-3 sm:space-x-4 bg-surface-elevated/90 backdrop-blur-md px-5 sm:px-6 py-3 rounded-full border border-white/10 shadow-2xl">
             {/* Mute Mic */}
             <button
               onClick={toggleMute}
               className={cn(
-                'p-3.5 rounded-full text-white transition-colors',
+                'p-3 sm:p-3.5 rounded-full text-white transition-colors',
                 isMuted ? 'bg-rose-500/80 hover:bg-rose-600' : 'bg-white/15 hover:bg-white/25'
               )}
               title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
             >
-              {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+              {isMuted ? <MicOff size={18} /> : <Mic size={18} />}
             </button>
 
             {/* Toggle Video (for video call) */}
@@ -202,22 +210,22 @@ export const CallModal: React.FC = () => {
               <button
                 onClick={toggleVideo}
                 className={cn(
-                  'p-3.5 rounded-full text-white transition-colors',
+                  'p-3 sm:p-3.5 rounded-full text-white transition-colors',
                   !isVideoEnabled ? 'bg-rose-500/80 hover:bg-rose-600' : 'bg-white/15 hover:bg-white/25'
                 )}
                 title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
               >
-                {isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+                {isVideoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
               </button>
             )}
 
             {/* End Call */}
             <button
               onClick={endCall}
-              className="p-3.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-lg transition-transform active:scale-95"
+              className="p-3 sm:p-3.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-lg transition-transform active:scale-95"
               title="End call"
             >
-              <PhoneOff size={22} />
+              <PhoneOff size={20} />
             </button>
           </div>
         </div>
