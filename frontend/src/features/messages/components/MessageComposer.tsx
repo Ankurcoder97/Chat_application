@@ -168,7 +168,7 @@ export const MessageComposer: React.FC = () => {
   }
 
   return (
-    <div className="relative flex flex-col p-2 sm:p-3 bg-surface-base/95 backdrop-blur-md border-t border-border-subtle select-none z-30 flex-shrink-0">
+    <div className="relative flex flex-col w-full p-2.5 sm:p-3 bg-surface-base border-t border-border-subtle select-none z-30 flex-shrink-0 shadow-md">
       {/* Reply-To Preview Banner */}
       {replyTo && (
         <div className="flex items-center justify-between px-3 py-2 mb-2 bg-surface-muted border-l-4 border-l-accent-500 rounded-xl text-xs animate-message-in">
@@ -267,7 +267,7 @@ export const MessageComposer: React.FC = () => {
             onKeyDown={handleKeyDown}
             placeholder={isUploading ? 'Uploading file...' : 'Type a message...'}
             disabled={isUploading}
-            className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none resize-none py-1.5 max-h-32 min-h-[24px] leading-relaxed"
+            className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-secondary focus:outline-none resize-none py-1.5 max-h-32 min-h-[34px] leading-relaxed"
           />
 
           {/* Attachment Button */}

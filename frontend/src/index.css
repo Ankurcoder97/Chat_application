@@ -54,10 +54,15 @@
   --accent-light: #182A20;
 }
 
-/* Base Body Styles */
-body {
+/* Base Body & Root Viewport Styles */
+html, body, #root {
+  height: 100%;
+  width: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--text-primary);
   background-color: var(--bg-base);

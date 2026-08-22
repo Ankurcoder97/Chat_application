@@ -62,9 +62,9 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="h-screen h-[100dvh] w-full overflow-hidden flex flex-col bg-surface-base select-none">
+    <div className="fixed inset-0 w-full h-full overflow-hidden flex flex-col bg-surface-base select-none">
       {/* Desktop Two-Column Layout (Sidebar 360px + ChatView) */}
-      <div className="flex-1 flex overflow-hidden min-h-0 w-full">
+      <div className="flex-1 flex overflow-hidden min-h-0 w-full h-full">
         {/* Left Column / Sidebar */}
         <div
           className={`h-full w-full md:w-[360px] lg:w-[400px] flex-shrink-0 min-h-0 ${
