@@ -154,20 +154,13 @@ export const CallModal: React.FC = () => {
         <div className="relative w-full h-full flex flex-col justify-between overflow-hidden">
           {/* VIDEO CALL LAYOUT */}
           {callType === 'video' ? (
-            <div className="relative w-full h-full flex items-center justify-center bg-zinc-950">
-              {/* Background placeholder while video connects */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950 text-white z-0 p-6 text-center">
-                <Avatar name={peerName} avatarUrl={peer?.avatarUrl} size="xl" className="shadow-2xl mb-4" />
-                <h3 className="text-base font-semibold">{peerName}</h3>
-                <p className="text-xs text-text-tertiary mt-1 animate-pulse">Video Call...</p>
-              </div>
-
-              {/* Fullscreen Remote Video (renders on top in z-10) */}
+            <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
+              {/* Fullscreen Remote Video */}
               <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                className="relative w-full h-full object-cover z-10"
+                className="w-full h-full object-cover"
               />
 
               {/* Picture-in-Picture Local Video */}
