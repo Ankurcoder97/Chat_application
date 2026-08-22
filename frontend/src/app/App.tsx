@@ -83,10 +83,12 @@ export const App: React.FC = () => {
         {/* Right Column / Active Chat Area */}
         <div
           className={`h-full flex-1 flex flex-col min-h-0 overflow-hidden ${
-            !activeConversation && mobileTab === 'chats' ? 'hidden md:flex' : 'flex'
+            !activeConversation ? 'hidden md:flex' : 'flex'
           }`}
         >
-          {mobileTab === 'calls' ? (
+          {activeConversation ? (
+            <ChatView />
+          ) : mobileTab === 'calls' ? (
             <div className="hidden md:flex flex-1 min-h-0">
               <CallsList />
             </div>

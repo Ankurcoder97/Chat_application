@@ -155,7 +155,7 @@ export const MessageComposer: React.FC = () => {
 
   if (isRecordingVoice) {
     return (
-      <div className="p-3 bg-surface-base border-t border-border-subtle">
+      <div className="p-2.5 sm:p-3 bg-surface-base border-t border-border-subtle">
         <VoiceRecorder
           onSendVoice={(voiceData) => {
             setIsRecordingVoice(false);
@@ -168,10 +168,10 @@ export const MessageComposer: React.FC = () => {
   }
 
   return (
-    <div className="relative flex flex-col p-3 bg-surface-base border-t border-border-subtle select-none">
+    <div className="relative flex flex-col p-2 sm:p-3 bg-surface-base/95 backdrop-blur-md border-t border-border-subtle select-none z-30 flex-shrink-0">
       {/* Reply-To Preview Banner */}
       {replyTo && (
-        <div className="flex items-center justify-between px-3 py-2 mb-2 bg-surface-muted border-l-4 border-l-accent-500 rounded-lg text-xs animate-message-in">
+        <div className="flex items-center justify-between px-3 py-2 mb-2 bg-surface-muted border-l-4 border-l-accent-500 rounded-xl text-xs animate-message-in">
           <div className="flex flex-col truncate">
             <span className="font-semibold text-accent-600 dark:text-accent-400">Replying to message</span>
             <span className="text-text-secondary truncate">{replyTo.content}</span>
@@ -187,7 +187,7 @@ export const MessageComposer: React.FC = () => {
 
       {/* Emoji Picker Popover */}
       {showEmojiPicker && (
-        <div className="absolute bottom-16 left-4 z-40 bg-surface-elevated border border-border-default rounded-2xl p-3 shadow-elevated grid grid-cols-7 gap-2 animate-message-in">
+        <div className="absolute bottom-16 left-3 sm:left-4 z-40 bg-surface-elevated border border-border-default rounded-2xl p-3 shadow-elevated grid grid-cols-7 gap-2 animate-message-in">
           {COMMON_EMOJIS.map((emoji) => (
             <button
               key={emoji}
@@ -202,7 +202,7 @@ export const MessageComposer: React.FC = () => {
 
       {/* Attachment Menu Popover */}
       {showAttachmentMenu && (
-        <div className="absolute bottom-16 left-12 z-40 bg-surface-elevated border border-border-default rounded-2xl p-2 shadow-elevated flex flex-col space-y-1 w-44 text-xs animate-message-in">
+        <div className="absolute bottom-16 left-10 sm:left-12 z-40 bg-surface-elevated border border-border-default rounded-2xl p-2 shadow-elevated flex flex-col space-y-1 w-44 text-xs animate-message-in">
           <button
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center space-x-2.5 p-2 rounded-xl hover:bg-surface-muted transition-colors text-left"
@@ -244,60 +244,65 @@ export const MessageComposer: React.FC = () => {
         accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt"
       />
 
-      {/* Composer Input Bar */}
-      <div className="flex items-end space-x-2 bg-surface-muted border border-border-default/80 focus-within:border-accent-500 rounded-2xl px-3 py-1.5 transition-colors">
-        {/* Emoji Button */}
-        <button
-          type="button"
-          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          className="p-1.5 text-text-secondary hover:text-text-primary rounded-full hover:bg-surface-elevated transition-colors"
-          title="Add Emoji"
-        >
-          <Smile size={20} />
-        </button>
-
-        {/* Attachment Button */}
-        <button
-          type="button"
-          onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
-          className="p-1.5 text-text-secondary hover:text-text-primary rounded-full hover:bg-surface-elevated transition-colors"
-          title="Attach file"
-        >
-          <Paperclip size={20} />
-        </button>
-
-        {/* Text Area */}
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          value={text}
-          onChange={handleTyping}
-          onKeyDown={handleKeyDown}
-          placeholder={isUploading ? 'Uploading file...' : 'Type a message...'}
-          disabled={isUploading}
-          className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none resize-none py-1.5 max-h-32 min-h-[24px] leading-relaxed"
-        />
-
-        {/* Action Button: Send or Mic */}
-        {text.trim() ? (
+      {/* WhatsApp Style: Input Bar + Circular Action Button */}
+      <div className="flex items-end space-x-2 w-full">
+        {/* Rounded Input Pill */}
+        <div className="flex-1 flex items-end space-x-1.5 sm:space-x-2 bg-surface-muted border border-border-default/80 focus-within:border-accent-500 focus-within:bg-surface-elevated rounded-2xl px-2.5 sm:px-3 py-1 transition-colors min-w-0 shadow-subtle">
+          {/* Emoji Button */}
           <button
             type="button"
-            onClick={() => handleSend()}
-            className="p-2 rounded-full bg-accent-500 hover:bg-accent-600 text-white transition-colors shadow-subtle flex-shrink-0"
-            title="Send Message"
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className="p-1.5 text-text-secondary hover:text-text-primary rounded-full hover:bg-surface-base transition-colors flex-shrink-0 mb-0.5"
+            title="Add Emoji"
           >
-            <Send size={16} />
+            <Smile size={19} />
           </button>
-        ) : (
+
+          {/* Text Area */}
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={text}
+            onChange={handleTyping}
+            onKeyDown={handleKeyDown}
+            placeholder={isUploading ? 'Uploading file...' : 'Type a message...'}
+            disabled={isUploading}
+            className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none resize-none py-1.5 max-h-32 min-h-[24px] leading-relaxed"
+          />
+
+          {/* Attachment Button */}
           <button
             type="button"
-            onClick={() => setIsRecordingVoice(true)}
-            className="p-2 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors flex-shrink-0"
-            title="Record Voice Message"
+            onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
+            className="p-1.5 text-text-secondary hover:text-text-primary rounded-full hover:bg-surface-base transition-colors flex-shrink-0 mb-0.5"
+            title="Attach file"
           >
-            <Mic size={20} />
+            <Paperclip size={19} />
           </button>
-        )}
+        </div>
+
+        {/* Circular Action Button: Send or Voice Recorder */}
+        <div className="flex-shrink-0 pb-0.5">
+          {text.trim() ? (
+            <button
+              type="button"
+              onClick={() => handleSend()}
+              className="w-10 h-10 rounded-full bg-accent-500 hover:bg-accent-600 active:scale-95 text-white flex items-center justify-center transition-all shadow-subtle"
+              title="Send Message"
+            >
+              <Send size={17} className="ml-0.5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsRecordingVoice(true)}
+              className="w-10 h-10 rounded-full bg-accent-500/10 hover:bg-accent-500/20 active:scale-95 text-accent-600 dark:text-accent-400 flex items-center justify-center transition-all shadow-subtle"
+              title="Record Voice Message"
+            >
+              <Mic size={19} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
