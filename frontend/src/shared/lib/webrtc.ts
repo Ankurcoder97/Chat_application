@@ -9,7 +9,7 @@ const RTC_CONFIG: RTCConfiguration = {
     { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.services.mozilla.com' },
     { urls: 'stun:global.stun.twilio.com:3478' },
-    // Open TURN relay server for symmetric cellular 4G/5G NAT traversal
+    // Open TURN relay server for cellular 4G/5G carrier symmetric NAT traversal
     {
       urls: [
         'turn:openrelay.metered.ca:80',
@@ -28,6 +28,7 @@ export class WebRTCManager {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private pendingCandidates: any[] = [];
+  private isHandlingOffer = false;
 
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
   private onLocalStreamCallback: ((stream: MediaStream) => void) | null = null;
@@ -188,6 +189,12 @@ export class WebRTCManager {
     offerSdp: RTCSessionDescriptionInit,
     callType: 'voice' | 'video'
   ) {
+    if (this.isHandlingOffer) {
+      console.log('⏳ Already processing offer/answer, ignoring duplicate call');
+      return;
+    }
+    this.isHandlingOffer = true;
+
     try {
       console.log('📥 Handling WebRTC Offer from:', callerId);
       const stream = await this.getLocalMedia(callType);
@@ -201,24 +208,29 @@ export class WebRTCManager {
         }
       });
 
-      await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
-      console.log('✅ Remote Description (Offer) set');
+      // Avoid resetting if already stable with answer
+      if (pc.signalingState !== 'stable' || pc.remoteDescription === null) {
+        await pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
+        console.log('✅ Remote Description (Offer) set');
 
-      // Drain queued ICE candidates
-      await this.drainPendingCandidates();
+        // Drain queued ICE candidates
+        await this.drainPendingCandidates();
 
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
 
-      const socket = getSocket();
-      socket?.emit('call:signal', {
-        callId,
-        recipientId: callerId,
-        signalData: { type: 'answer', sdp: answer },
-      });
-      console.log('📤 WebRTC Answer sent successfully');
+        const socket = getSocket();
+        socket?.emit('call:signal', {
+          callId,
+          recipientId: callerId,
+          signalData: { type: 'answer', sdp: answer },
+        });
+        console.log('📤 WebRTC Answer sent successfully');
+      }
     } catch (err) {
       console.error('Error handling WebRTC offer/answer:', err);
+    } finally {
+      this.isHandlingOffer = false;
     }
   }
 
@@ -226,7 +238,7 @@ export class WebRTCManager {
   public async handleSignal(signalData: any) {
     try {
       if (signalData.type === 'answer' && signalData.sdp) {
-        if (this.peerConnection) {
+        if (this.peerConnection && this.peerConnection.signalingState === 'have-local-offer') {
           console.log('📥 Received WebRTC Answer, setting Remote Description');
           await this.peerConnection.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
           await this.drainPendingCandidates();
@@ -287,6 +299,7 @@ export class WebRTCManager {
   public cleanup() {
     console.log('🧹 Cleaning up WebRTC Manager');
     this.pendingCandidates = [];
+    this.isHandlingOffer = false;
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => track.stop());
       this.localStream = null;
