@@ -21,7 +21,7 @@ Follow these step-by-step instructions to deploy Nexus Chat to **Render** (Backe
    - **Region:** Any (e.g. `Oregon (US West)` or `Frankfurt (EU)`)
    - **Root Directory:** `backend`
    - **Runtime:** `Node`
-   - **Build Command:** `npm install && npm run build`
+   - **Build Command:** `npm install --include=dev && npm run build`
    - **Start Command:** `npm run start`
    - **Instance Type:** `Free` (or `Starter`)
 
