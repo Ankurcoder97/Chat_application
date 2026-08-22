@@ -1,89 +1,78 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 import { useCallStore } from '../store/callStore';
 import { Avatar } from '../../../shared/components/Avatar';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from 'lucide-react';
 import { cn } from '../../../shared/lib/utils';
 
+// Isolated Call Timer component to prevent re-rendering the video player every second
+const CallDurationBadge = memo(() => {
+  const duration = useCallStore((state) => state.duration);
+  const mins = Math.floor(duration / 60);
+  const secs = duration % 60;
+  const formatted = `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
+  return <span className="text-[11px] font-mono text-emerald-400">{formatted}</span>;
+});
+
+CallDurationBadge.displayName = 'CallDurationBadge';
+
 export const CallModal: React.FC = () => {
-  const {
-    callStatus,
-    callType,
-    peer,
-    localStream,
-    remoteStream,
-    duration,
-    isMuted,
-    isVideoEnabled,
-    acceptCall,
-    rejectCall,
-    endCall,
-    toggleMute,
-    toggleVideo,
-  } = useCallStore();
+  const callStatus = useCallStore((state) => state.callStatus);
+  const callType = useCallStore((state) => state.callType);
+  const peer = useCallStore((state) => state.peer);
+  const localStream = useCallStore((state) => state.localStream);
+  const remoteStream = useCallStore((state) => state.remoteStream);
+  const isMuted = useCallStore((state) => state.isMuted);
+  const isVideoEnabled = useCallStore((state) => state.isVideoEnabled);
+
+  const acceptCall = useCallStore((state) => state.acceptCall);
+  const rejectCall = useCallStore((state) => state.rejectCall);
+  const endCall = useCallStore((state) => state.endCall);
+  const toggleMute = useCallStore((state) => state.toggleMute);
+  const toggleVideo = useCallStore((state) => state.toggleVideo);
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Callback ref binders for immediate DOM stream binding
-  const bindLocalVideo = (el: HTMLVideoElement | null) => {
-    localVideoRef.current = el;
-    if (el && localStream) {
-      el.srcObject = localStream;
-      el.play().catch(() => {});
-    }
-  };
-
-  const bindRemoteVideo = (el: HTMLVideoElement | null) => {
-    remoteVideoRef.current = el;
-    if (el && remoteStream) {
-      el.srcObject = remoteStream;
-      el.play().catch(() => {});
-    }
-  };
-
-  const bindRemoteAudio = (el: HTMLAudioElement | null) => {
-    remoteAudioRef.current = el;
-    if (el && remoteStream) {
-      el.srcObject = remoteStream;
-      el.play().catch(() => {});
-    }
-  };
-
-  // Re-attach local stream whenever it changes
+  // Stable stream attachment for local video (prevents re-attachment blinking)
   useEffect(() => {
     if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch(() => {});
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+        localVideoRef.current.play().catch(() => {});
+      }
     }
-  }, [localStream, callStatus, callType]);
+  }, [localStream, callStatus]);
 
-  // Re-attach remote stream whenever it changes
+  // Stable stream attachment for remote video (prevents re-attachment blinking)
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.play().catch(() => {});
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.play().catch(() => {});
+      }
     }
+  }, [remoteStream, callStatus]);
+
+  // Stable stream attachment for remote audio
+  useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
-      remoteAudioRef.current.srcObject = remoteStream;
-      remoteAudioRef.current.play().catch(() => {});
+      if (remoteAudioRef.current.srcObject !== remoteStream) {
+        remoteAudioRef.current.srcObject = remoteStream;
+        remoteAudioRef.current.play().catch(() => {});
+      }
     }
-  }, [remoteStream, callStatus, callType]);
+  }, [remoteStream, callStatus]);
 
   if (callStatus === 'idle') return null;
-
-  const formatTimer = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  };
 
   const peerName = peer?.name || 'Unknown User';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md select-none animate-message-in">
       {/* Hidden audio element for voice streaming across all call types */}
-      <audio ref={bindRemoteAudio} autoPlay playsInline />
+      <audio ref={remoteAudioRef} autoPlay playsInline />
 
       {/* 1. INCOMING CALL SCREEN */}
       {callStatus === 'incoming' && (
@@ -168,7 +157,7 @@ export const CallModal: React.FC = () => {
             <div className="relative w-full h-full flex items-center justify-center bg-black">
               {/* Fullscreen Remote Video */}
               <video
-                ref={bindRemoteVideo}
+                ref={remoteVideoRef}
                 autoPlay
                 playsInline
                 className="w-full h-full object-cover"
@@ -186,7 +175,7 @@ export const CallModal: React.FC = () => {
               {/* Picture-in-Picture Local Video */}
               <div className="absolute top-4 right-4 w-24 sm:w-36 h-36 sm:h-48 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 z-20 bg-surface-elevated">
                 <video
-                  ref={bindLocalVideo}
+                  ref={localVideoRef}
                   autoPlay
                   playsInline
                   muted
@@ -197,7 +186,7 @@ export const CallModal: React.FC = () => {
               {/* Caller Name & Timer Badge */}
               <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-20 flex items-center space-x-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 text-white">
                 <span className="text-xs font-semibold truncate max-w-[120px] sm:max-w-[200px]">{peerName}</span>
-                <span className="text-[11px] font-mono text-emerald-400">{formatTimer(duration)}</span>
+                <CallDurationBadge />
               </div>
             </div>
           ) : (
@@ -210,9 +199,9 @@ export const CallModal: React.FC = () => {
               </div>
 
               <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{peerName}</h2>
-              <span className="mt-2 px-3 py-1 bg-white/10 rounded-full text-xs font-mono text-emerald-400">
-                {formatTimer(duration)}
-              </span>
+              <div className="mt-2 px-3 py-1 bg-white/10 rounded-full text-xs">
+                <CallDurationBadge />
+              </div>
 
               {/* Audio visualizer wave bar */}
               <div className="flex items-center space-x-1.5 mt-8 h-8">
