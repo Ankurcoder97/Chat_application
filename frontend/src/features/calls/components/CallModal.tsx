@@ -154,23 +154,21 @@ export const CallModal: React.FC = () => {
         <div className="relative w-full h-full flex flex-col justify-between overflow-hidden">
           {/* VIDEO CALL LAYOUT */}
           {callType === 'video' ? (
-            <div className="relative w-full h-full flex items-center justify-center bg-black">
-              {/* Fullscreen Remote Video */}
+            <div className="relative w-full h-full flex items-center justify-center bg-zinc-950">
+              {/* Background placeholder while video connects */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950 text-white z-0 p-6 text-center">
+                <Avatar name={peerName} avatarUrl={peer?.avatarUrl} size="xl" className="shadow-2xl mb-4" />
+                <h3 className="text-base font-semibold">{peerName}</h3>
+                <p className="text-xs text-text-tertiary mt-1 animate-pulse">Video Call...</p>
+              </div>
+
+              {/* Fullscreen Remote Video (renders on top in z-10) */}
               <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                className="w-full h-full object-cover"
+                className="relative w-full h-full object-cover z-10"
               />
-
-              {/* Connecting placeholder if remote video track hasn't arrived yet */}
-              {(!remoteStream || remoteStream.getVideoTracks().length === 0) && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900/90 text-white z-10 p-6 text-center">
-                  <Avatar name={peerName} avatarUrl={peer?.avatarUrl} size="xl" className="shadow-2xl mb-4" />
-                  <h3 className="text-base font-semibold">{peerName}</h3>
-                  <p className="text-xs text-text-tertiary mt-1 animate-pulse">Connecting video stream...</p>
-                </div>
-              )}
 
               {/* Picture-in-Picture Local Video */}
               <div className="absolute top-4 right-4 w-24 sm:w-36 h-36 sm:h-48 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 z-20 bg-surface-elevated">
