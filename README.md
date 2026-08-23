@@ -5,7 +5,7 @@ Production-grade, mobile-first real-time messaging SaaS built on the MERN stack 
 ## Features
 
 ### 📞 WebRTC Voice & Video Calling (Phase 2)
-- **1-to-1 Voice & Video Calls**: Direct peer-to-peer streaming via WebRTC (`RTCPeerConnection`) with STUN servers.
+- **1-to-1 Voice & Video Calls**: WebRTC (`RTCPeerConnection`) voice/video with STUN and configurable TURN relay servers.
 - **Signaling via Socket.IO**: Real-time SDP Offer/Answer exchanges and ICE candidate relay.
 - **Synthetic Ringtone Engine**: Web Audio API generated ringtones, dial tones, and end-call audio feedback.
 - **Complete In-Call Controls**: Fullscreen remote video, picture-in-picture local preview, mic mute, camera toggle, duration timer.

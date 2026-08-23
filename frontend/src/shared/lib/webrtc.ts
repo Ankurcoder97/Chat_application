@@ -1,26 +1,42 @@
 import { getSocket } from '../../socket/socketClient';
 
+const DEFAULT_STUN_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+  { urls: 'stun:stun.services.mozilla.com' },
+  { urls: 'stun:global.stun.twilio.com:3478' },
+];
+
+function parseIceServersFromEnv(): RTCIceServer[] {
+  const raw = import.meta.env.VITE_RTC_ICE_SERVERS;
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      console.warn('VITE_RTC_ICE_SERVERS must be a JSON array. Falling back to STUN only.');
+      return [];
+    }
+
+    return parsed.filter((server): server is RTCIceServer => {
+      const urls = (server as RTCIceServer)?.urls;
+      return typeof urls === 'string' || (Array.isArray(urls) && urls.every((url) => typeof url === 'string'));
+    });
+  } catch (err) {
+    console.warn('Invalid VITE_RTC_ICE_SERVERS JSON. Falling back to STUN only.', err);
+    return [];
+  }
+}
+
+const configuredIceServers = parseIceServersFromEnv();
+
 const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:stun.services.mozilla.com' },
-    { urls: 'stun:global.stun.twilio.com:3478' },
-    // Open TURN relay server for cellular 4G/5G carrier symmetric NAT traversal
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp',
-      ],
-      username: 'openrelay',
-      credential: 'openrelay',
-    },
-  ],
+  iceServers: configuredIceServers.length > 0 ? configuredIceServers : DEFAULT_STUN_SERVERS,
   iceCandidatePoolSize: 10,
+  iceTransportPolicy: import.meta.env.VITE_RTC_FORCE_RELAY === 'true' ? 'relay' : 'all',
 };
 
 export class WebRTCManager {

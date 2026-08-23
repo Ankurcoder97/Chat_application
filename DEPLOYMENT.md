@@ -58,9 +58,33 @@ Follow these step-by-step instructions to deploy Nexus Chat to **Render** (Backe
    | :--- | :--- | :--- |
    | `VITE_API_URL` | `https://nexus-backend-xyz.onrender.com/api/v1` | *(Replace with your Render URL)* |
    | `VITE_SOCKET_URL` | `https://nexus-backend-xyz.onrender.com` | *(Replace with your Render URL)* |
+   | `VITE_RTC_ICE_SERVERS` | See the TURN example below | Required for reliable voice/video calls across different networks |
+   | `VITE_RTC_FORCE_RELAY` | `false` | Use `true` only while debugging failed cross-network calls |
 
 6. Click **Deploy**.
 7. Vercel will build your app and give you a live production URL (e.g. `https://nexus-chat.vercel.app`).
+
+---
+
+## Step 2.1: Add TURN for Real Internet Calls
+
+WebRTC can connect directly on the same Wi-Fi or simple networks with STUN, but many mobile networks, office Wi-Fi networks, and home routers block direct peer-to-peer media. For users far away or on different ISPs, configure a real TURN relay.
+
+Create TURN credentials with a provider such as Metered, Twilio/Numb, Xirsys, or your own coturn server. Then add this Vercel environment variable:
+
+```env
+VITE_RTC_ICE_SERVERS=[{"urls":"stun:stun.l.google.com:19302"},{"urls":["turn:YOUR_TURN_HOST:3478","turn:YOUR_TURN_HOST:443?transport=tcp","turns:YOUR_TURN_HOST:5349?transport=tcp"],"username":"YOUR_TURN_USERNAME","credential":"YOUR_TURN_PASSWORD"}]
+```
+
+If calls still connect locally but remote users cannot see video or hear audio, temporarily set:
+
+```env
+VITE_RTC_FORCE_RELAY=true
+```
+
+Redeploy the frontend after changing Vercel environment variables. If relay mode fixes the call, keep TURN configured and set `VITE_RTC_FORCE_RELAY=false` again so direct calls can still be used when available.
+
+Also make sure users open the app over `https://`, not an IP address over plain `http://`. Browsers block camera and microphone access on insecure origins except `localhost`.
 
 ---
 
