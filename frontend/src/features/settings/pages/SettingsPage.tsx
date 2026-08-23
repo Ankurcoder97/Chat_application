@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useAuthStore } from '../../auth/store/authStore';
 import { useUIStore } from '../../../shared/store/uiStore';
 import { Avatar } from '../../../shared/components/Avatar';
 import { Button } from '../../../shared/components/Button';
 import { Input } from '../../../shared/components/Input';
-import { ArrowLeft, Moon, Sun, Monitor, Shield, User as UserIcon, Check, MessageSquare, Phone, Settings as SettingsIcon } from 'lucide-react';
+import api from '../../../shared/lib/axios';
+import { ArrowLeft, Moon, Sun, Monitor, Shield, User as UserIcon, Check, MessageSquare, Phone, Settings as SettingsIcon, Camera, Trash2, Loader2 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
   const { user, updateProfile, logout } = useAuthStore();
@@ -16,6 +17,60 @@ export const SettingsPage: React.FC = () => {
   const [showOnlineStatus, setShowOnlineStatus] = useState(user?.privacy?.showOnlineStatus ?? true);
   const [isSaved, setIsSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Please choose an image file.');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError('Profile picture must be 5 MB or smaller.');
+      return;
+    }
+
+    try {
+      setAvatarError(null);
+      setIsUploadingAvatar(true);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const { data } = await api.post('/media/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      await updateProfile({ avatarUrl: data.data.url });
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2500);
+    } catch (err) {
+      console.error('Failed to upload profile picture', err);
+      setAvatarError('Could not upload profile picture. Please try again.');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    try {
+      setAvatarError(null);
+      setIsUploadingAvatar(true);
+      await updateProfile({ avatarUrl: '' });
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2500);
+    } catch (err) {
+      console.error('Failed to remove profile picture', err);
+      setAvatarError('Could not remove profile picture. Please try again.');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,12 +109,53 @@ export const SettingsPage: React.FC = () => {
       <div className="max-w-xl mx-auto w-full p-4 sm:p-6 space-y-6">
         {/* Profile Card */}
         <div className="flex items-center space-x-4 p-4 bg-surface-elevated rounded-2xl border border-border-default shadow-subtle">
-          <Avatar name={user?.name || 'User'} avatarUrl={user?.avatarUrl} size="lg" />
+          <div className="relative flex-shrink-0">
+            <Avatar name={user?.name || 'User'} avatarUrl={user?.avatarUrl} size="lg" />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingAvatar}
+              className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-accent-500 hover:bg-accent-600 text-white border-2 border-surface-elevated flex items-center justify-center shadow-subtle transition-colors disabled:opacity-60"
+              title="Change profile picture"
+              aria-label="Change profile picture"
+            >
+              {isUploadingAvatar ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}
+            </button>
+          </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-bold text-text-primary truncate">{user?.name}</h3>
             <p className="text-xs text-text-secondary">@{user?.username}</p>
             <p className="text-xs text-text-tertiary truncate">{user?.email}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingAvatar}
+                className="text-xs font-semibold text-accent-600 dark:text-accent-400 hover:underline disabled:opacity-60"
+              >
+                Change photo
+              </button>
+              {user?.avatarUrl && (
+                <button
+                  type="button"
+                  onClick={handleRemoveAvatar}
+                  disabled={isUploadingAvatar}
+                  className="inline-flex items-center text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline disabled:opacity-60"
+                >
+                  <Trash2 size={12} className="mr-1" />
+                  Remove
+                </button>
+              )}
+            </div>
+            {avatarError && <p className="text-[11px] text-rose-500 mt-1">{avatarError}</p>}
           </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleAvatarUpload}
+            className="hidden"
+          />
         </div>
 
         {/* Profile Edit Form */}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { getInitials, getAvatarColor, cn } from '../lib/utils';
+import { getInitials, getAvatarColor, getMediaUrl, cn } from '../lib/utils';
 
 interface AvatarProps {
   name: string;
@@ -36,12 +36,13 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   const initials = getInitials(name);
   const bgColor = getAvatarColor(name);
+  const resolvedAvatarUrl = getMediaUrl(avatarUrl);
 
   return (
     <div className={cn('relative inline-flex flex-shrink-0 items-center justify-center', className)}>
-      {avatarUrl ? (
+      {resolvedAvatarUrl ? (
         <img
-          src={avatarUrl}
+          src={resolvedAvatarUrl}
           alt={`${name}'s avatar`}
           className={cn('rounded-full object-cover shadow-subtle', sizeClasses[size])}
           onError={(e) => {
