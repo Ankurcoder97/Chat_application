@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, memo } from 'react';
+import React, { useEffect, useMemo, useRef, memo } from 'react';
 import { useCallStore } from '../store/callStore';
 import { Avatar } from '../../../shared/components/Avatar';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from 'lucide-react';
@@ -34,6 +34,14 @@ export const CallModal: React.FC = () => {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const remoteVideoStream = useMemo(() => {
+    const tracks = remoteStream?.getVideoTracks() ?? [];
+    return tracks.length ? new MediaStream(tracks) : null;
+  }, [remoteStream]);
+  const remoteAudioStream = useMemo(() => {
+    const tracks = remoteStream?.getAudioTracks() ?? [];
+    return tracks.length ? new MediaStream(tracks) : null;
+  }, [remoteStream]);
 
   // Stable stream attachment for local video
   useEffect(() => {
@@ -47,23 +55,25 @@ export const CallModal: React.FC = () => {
 
   // Stable stream attachment for remote video
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      if (remoteVideoRef.current.srcObject !== remoteStream) {
-        remoteVideoRef.current.srcObject = remoteStream;
+    if (remoteVideoRef.current && remoteVideoStream) {
+      if (remoteVideoRef.current.srcObject !== remoteVideoStream) {
+        remoteVideoRef.current.srcObject = remoteVideoStream;
       }
       remoteVideoRef.current.play().catch(() => {});
     }
-  }, [remoteStream, callStatus]);
+  }, [remoteVideoStream, callStatus]);
 
   // Stable stream attachment for remote audio
   useEffect(() => {
-    if (remoteAudioRef.current && remoteStream) {
-      if (remoteAudioRef.current.srcObject !== remoteStream) {
-        remoteAudioRef.current.srcObject = remoteStream;
+    if (remoteAudioRef.current && remoteAudioStream) {
+      if (remoteAudioRef.current.srcObject !== remoteAudioStream) {
+        remoteAudioRef.current.srcObject = remoteAudioStream;
       }
+      remoteAudioRef.current.muted = false;
+      remoteAudioRef.current.volume = 1;
       remoteAudioRef.current.play().catch(() => {});
     }
-  }, [remoteStream, callStatus]);
+  }, [remoteAudioStream, callStatus]);
 
   if (callStatus === 'idle') return null;
 
@@ -75,9 +85,9 @@ export const CallModal: React.FC = () => {
       <audio
         ref={(el) => {
           remoteAudioRef.current = el;
-          if (el && remoteStream) {
-            if (el.srcObject !== remoteStream) {
-              el.srcObject = remoteStream;
+          if (el && remoteAudioStream) {
+            if (el.srcObject !== remoteAudioStream) {
+              el.srcObject = remoteAudioStream;
             }
             el.volume = 1.0;
             el.muted = false;
@@ -173,8 +183,8 @@ export const CallModal: React.FC = () => {
               <video
                 ref={(el) => {
                   remoteVideoRef.current = el;
-                  if (el && remoteStream && el.srcObject !== remoteStream) {
-                    el.srcObject = remoteStream;
+                  if (el && remoteVideoStream && el.srcObject !== remoteVideoStream) {
+                    el.srcObject = remoteVideoStream;
                     el.play().catch((e) => console.log('Remote video play:', e));
                   }
                 }}

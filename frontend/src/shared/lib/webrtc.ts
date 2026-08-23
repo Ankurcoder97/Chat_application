@@ -97,22 +97,31 @@ export class WebRTCManager {
     pc.ontrack = (event) => {
       console.log('🎥 Remote track received:', event.track.kind, event.track.id);
       
-      let streamToUse: MediaStream;
-      if (event.streams && event.streams[0]) {
-        streamToUse = event.streams[0];
-      } else {
-        if (!this.remoteStream) {
-          this.remoteStream = new MediaStream();
-        }
-        if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
-          this.remoteStream.addTrack(event.track);
-        }
-        streamToUse = this.remoteStream;
+      if (!this.remoteStream) {
+        this.remoteStream = new MediaStream();
       }
-      this.remoteStream = streamToUse;
+
+      const incomingStream = event.streams?.[0];
+      const tracks = incomingStream?.getTracks().length ? incomingStream.getTracks() : [event.track];
+
+      tracks.forEach((track) => {
+        if (!this.remoteStream!.getTracks().some((existingTrack) => existingTrack.id === track.id)) {
+          this.remoteStream!.addTrack(track);
+        }
+      });
+
+      if (!this.remoteStream.getTracks().some((track) => track.id === event.track.id)) {
+        this.remoteStream.addTrack(event.track);
+      }
+
+      event.track.onunmute = () => {
+        if (this.remoteStream && this.onRemoteStreamCallback) {
+          this.onRemoteStreamCallback(new MediaStream(this.remoteStream.getTracks()));
+        }
+      };
 
       if (this.onRemoteStreamCallback) {
-        this.onRemoteStreamCallback(streamToUse);
+        this.onRemoteStreamCallback(new MediaStream(this.remoteStream.getTracks()));
       }
     };
 
