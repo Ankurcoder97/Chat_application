@@ -39,12 +39,15 @@ const RTC_CONFIG: RTCConfiguration = {
   iceTransportPolicy: import.meta.env.VITE_RTC_FORCE_RELAY === 'true' ? 'relay' : 'all',
 };
 
+type CameraFacingMode = 'user' | 'environment';
+
 export class WebRTCManager {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private pendingCandidates: any[] = [];
   private isHandlingOffer = false;
+  private cameraFacingMode: CameraFacingMode = 'user';
 
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
   private onLocalStreamCallback: ((stream: MediaStream) => void) | null = null;
@@ -80,7 +83,7 @@ export class WebRTCManager {
           ? {
               width: { ideal: 1280, max: 1920 },
               height: { ideal: 720, max: 1080 },
-              facingMode: 'user',
+              facingMode: { ideal: this.cameraFacingMode },
             }
           : false,
     };
@@ -91,6 +94,63 @@ export class WebRTCManager {
       this.onLocalStreamCallback(stream);
     }
     return stream;
+  }
+
+  public async switchCamera(): Promise<MediaStream | null> {
+    if (!this.localStream || this.localStream.getVideoTracks().length === 0) {
+      return this.getLocalMedia('video');
+    }
+
+    const previousFacingMode = this.cameraFacingMode;
+    const nextFacingMode: CameraFacingMode = previousFacingMode === 'user' ? 'environment' : 'user';
+    const oldVideoTrack = this.localStream.getVideoTracks()[0];
+    const wasEnabled = oldVideoTrack?.enabled ?? true;
+
+    try {
+      this.cameraFacingMode = nextFacingMode;
+      const nextStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          facingMode: { ideal: nextFacingMode },
+        },
+      });
+
+      const nextVideoTrack = nextStream.getVideoTracks()[0];
+      if (!nextVideoTrack) {
+        nextStream.getTracks().forEach((track) => track.stop());
+        this.cameraFacingMode = previousFacingMode;
+        return this.localStream;
+      }
+
+      nextVideoTrack.enabled = wasEnabled;
+
+      const videoSender = this.peerConnection
+        ?.getSenders()
+        .find((sender) => sender.track?.kind === 'video');
+
+      if (videoSender) {
+        await videoSender.replaceTrack(nextVideoTrack);
+      }
+
+      if (oldVideoTrack) {
+        this.localStream.removeTrack(oldVideoTrack);
+        oldVideoTrack.stop();
+      }
+
+      this.localStream.addTrack(nextVideoTrack);
+
+      const updatedStream = new MediaStream(this.localStream.getTracks());
+      this.localStream = updatedStream;
+      this.onLocalStreamCallback?.(updatedStream);
+
+      return updatedStream;
+    } catch (err) {
+      this.cameraFacingMode = previousFacingMode;
+      console.error('Error switching camera:', err);
+      return this.localStream;
+    }
   }
 
   private initPeerConnection(callId: string, peerId: string): RTCPeerConnection {
@@ -325,6 +385,7 @@ export class WebRTCManager {
     console.log('🧹 Cleaning up WebRTC Manager');
     this.pendingCandidates = [];
     this.isHandlingOffer = false;
+    this.cameraFacingMode = 'user';
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => track.stop());
       this.localStream = null;

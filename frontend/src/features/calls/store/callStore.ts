@@ -28,6 +28,7 @@ interface CallState {
   setRemoteStream: (stream: MediaStream | null) => void;
   toggleMute: () => void;
   toggleVideo: () => void;
+  switchCamera: () => Promise<void>;
   incrementDuration: () => void;
 }
 
@@ -242,6 +243,13 @@ export const useCallStore = create<CallState>((set, get) => {
       const next = !get().isVideoEnabled;
       webrtc.toggleVideo(next);
       set({ isVideoEnabled: next });
+    },
+
+    switchCamera: async () => {
+      const stream = await webrtc.switchCamera();
+      if (stream) {
+        set({ localStream: stream, isVideoEnabled: stream.getVideoTracks().some((track) => track.enabled) });
+      }
     },
 
     incrementDuration: () => set((state) => ({ duration: state.duration + 1 })),

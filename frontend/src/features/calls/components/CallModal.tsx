@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, memo } from 'react';
 import { useCallStore } from '../store/callStore';
 import { Avatar } from '../../../shared/components/Avatar';
-import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from 'lucide-react';
+import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, SwitchCamera } from 'lucide-react';
 import { cn } from '../../../shared/lib/utils';
 
 // Isolated Call Timer component to prevent re-rendering the video player every second
@@ -30,6 +30,7 @@ export const CallModal: React.FC = () => {
   const endCall = useCallStore((state) => state.endCall);
   const toggleMute = useCallStore((state) => state.toggleMute);
   const toggleVideo = useCallStore((state) => state.toggleVideo);
+  const switchCamera = useCallStore((state) => state.switchCamera);
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -260,16 +261,26 @@ export const CallModal: React.FC = () => {
 
             {/* Toggle Video (for video call) */}
             {callType === 'video' && (
-              <button
-                onClick={toggleVideo}
-                className={cn(
-                  'p-3 sm:p-3.5 rounded-full text-white transition-colors',
-                  !isVideoEnabled ? 'bg-rose-500/80 hover:bg-rose-600' : 'bg-white/15 hover:bg-white/25'
-                )}
-                title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
-              >
-                {isVideoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
-              </button>
+              <>
+                <button
+                  onClick={switchCamera}
+                  className="p-3 sm:p-3.5 rounded-full text-white transition-colors bg-white/15 hover:bg-white/25"
+                  title="Switch camera"
+                >
+                  <SwitchCamera size={18} />
+                </button>
+
+                <button
+                  onClick={toggleVideo}
+                  className={cn(
+                    'p-3 sm:p-3.5 rounded-full text-white transition-colors',
+                    !isVideoEnabled ? 'bg-rose-500/80 hover:bg-rose-600' : 'bg-white/15 hover:bg-white/25'
+                  )}
+                  title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
+                >
+                  {isVideoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
+                </button>
+              </>
             )}
 
             {/* End Call */}
