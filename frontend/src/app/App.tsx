@@ -68,7 +68,7 @@ export const App: React.FC = () => {
         {/* Left Column / Sidebar */}
         <div
           className={`h-full w-full md:w-[360px] lg:w-[400px] flex-shrink-0 min-h-0 ${
-            activeConversation || mobileTab !== 'chats' ? 'hidden md:flex flex-col' : 'flex flex-col'
+            activeConversation ? 'hidden md:flex flex-col' : 'flex flex-col'
           }`}
         >
           {mobileTab === 'calls' ? (
