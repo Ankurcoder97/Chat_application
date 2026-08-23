@@ -126,5 +126,11 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
     });
   });
 
+  ioInstance = io;
   return io;
+}
+
+let ioInstance: SocketIOServer | null = null;
+export function getIO(): SocketIOServer | null {
+  return ioInstance;
 }

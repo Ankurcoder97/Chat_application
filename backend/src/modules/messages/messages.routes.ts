@@ -12,5 +12,6 @@ router.post('/conversations/:id/messages', rateLimitStandard, (req, res, next) =
 router.patch('/messages/:id', (req, res, next) => messagesController.editMessage(req as any, res, next));
 router.delete('/messages/:id', (req, res, next) => messagesController.deleteMessage(req as any, res, next));
 router.post('/messages/:id/reactions', (req, res, next) => messagesController.toggleReaction(req as any, res, next));
+router.post('/messages/sync', rateLimitStandard, (req, res, next) => messagesController.syncOfflineMessages(req as any, res, next));
 
 export const messagesRoutes = router;

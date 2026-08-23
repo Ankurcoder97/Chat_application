@@ -98,6 +98,16 @@ export interface Message {
   sentAt: string;
   isOptimistic?: boolean;
   hasError?: boolean;
+  transportType?: 'internet' | 'bluetooth' | 'local_mesh' | 'offline_queue';
+  deliveryState?:
+    | 'PENDING_LOCAL'
+    | 'BLUETOOTH_TRANSFER'
+    | 'BLUETOOTH_RECEIVED'
+    | 'SYNC_PENDING'
+    | 'SERVER_SYNCED'
+    | 'DELIVERED'
+    | 'READ';
+  relayedBy?: string;
 }
 
 export interface Conversation {

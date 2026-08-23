@@ -6,6 +6,8 @@ import { useChatStore } from '../features/conversations/store/chatStore';
 import { Message, Conversation } from '../shared/types';
 import { useCallStore } from '../features/calls/store/callStore';
 import { webrtc } from '../shared/lib/webrtc';
+import { outboxManager } from '../shared/lib/outboxManager';
+import { localCache } from '../shared/lib/localCache';
 
 export function useSocketEvents() {
   const queryClient = useQueryClient();
@@ -76,18 +78,21 @@ export function useSocketEvents() {
 
     // 2. Message Ack (Replaces optimistic message with server message)
     const handleMessageAck = ({ clientId, serverId, sentAt, seqNo }: any) => {
-      if (!activeConversation) return;
-      queryClient.setQueryData(['messages', activeConversation.id], (oldData: any) => {
-        if (!oldData) return oldData;
-        return {
-          ...oldData,
-          messages: oldData.messages.map((m: Message) =>
-            m.clientId === clientId
-              ? { ...m, id: serverId, sentAt, seqNo, isOptimistic: false, hasError: false }
-              : m
-          ),
-        };
-      });
+      outboxManager.dequeue(clientId);
+      if (activeConversation) {
+        localCache.updateMessageStatus(activeConversation.id, clientId, serverId, sentAt, seqNo);
+        queryClient.setQueryData(['messages', activeConversation.id], (oldData: any) => {
+          if (!oldData) return oldData;
+          return {
+            ...oldData,
+            messages: oldData.messages.map((m: Message) =>
+              m.clientId === clientId
+                ? { ...m, id: serverId, sentAt, seqNo, isOptimistic: false, hasError: false }
+                : m
+            ),
+          };
+        });
+      }
     };
 
     // 3. Delivered Status Update
@@ -185,7 +190,18 @@ export function useSocketEvents() {
       useCallStore.getState().onCallEnded();
     };
 
+    const handleConnect = () => {
+      console.log('⚡ Socket connected, flushing outbox queue...');
+      outboxManager.flushQueue();
+    };
+
+    // If socket is already connected, flush outbox queue immediately
+    if (socket.connected) {
+      outboxManager.flushQueue();
+    }
+
     // Register listeners
+    socket.on('connect', handleConnect);
     socket.on('message:new', handleNewMessage);
     socket.on('message:ack', handleMessageAck);
     socket.on('message:delivered', handleDelivered);
@@ -202,6 +218,7 @@ export function useSocketEvents() {
     socket.on('call:ended', handleCallEnded);
 
     return () => {
+      socket.off('connect', handleConnect);
       socket.off('message:new', handleNewMessage);
       socket.off('message:ack', handleMessageAck);
       socket.off('message:delivered', handleDelivered);

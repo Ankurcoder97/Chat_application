@@ -1,6 +1,15 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'voice';
+export type TransportType = 'internet' | 'bluetooth' | 'local_mesh' | 'offline_queue';
+export type DeliveryState =
+  | 'PENDING_LOCAL'
+  | 'BLUETOOTH_TRANSFER'
+  | 'BLUETOOTH_RECEIVED'
+  | 'SYNC_PENDING'
+  | 'SERVER_SYNCED'
+  | 'DELIVERED'
+  | 'READ';
 
 export interface IMedia {
   url: string;
@@ -37,6 +46,10 @@ export interface IMessage extends Document {
   replyTo?: IReplyTo;
   reactions: IReaction[];
   forwardedFrom?: Types.ObjectId;
+  transportType: TransportType;
+  relayedBy?: Types.ObjectId;
+  deliveryState: DeliveryState;
+  signature?: string;
   status: {
     delivered: Array<{ userId: Types.ObjectId; at: Date }>;
     read: Array<{ userId: Types.ObjectId; at: Date }>;
@@ -99,6 +112,26 @@ const MessageSchema = new Schema<IMessage>(
     replyTo: ReplyToSchema,
     reactions: [ReactionSchema],
     forwardedFrom: { type: Schema.Types.ObjectId, ref: 'Message' },
+    transportType: {
+      type: String,
+      enum: ['internet', 'bluetooth', 'local_mesh', 'offline_queue'],
+      default: 'internet',
+    },
+    relayedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    deliveryState: {
+      type: String,
+      enum: [
+        'PENDING_LOCAL',
+        'BLUETOOTH_TRANSFER',
+        'BLUETOOTH_RECEIVED',
+        'SYNC_PENDING',
+        'SERVER_SYNCED',
+        'DELIVERED',
+        'READ',
+      ],
+      default: 'SERVER_SYNCED',
+    },
+    signature: { type: String },
     status: {
       delivered: [{ userId: { type: Schema.Types.ObjectId, ref: 'User' }, at: { type: Date, default: Date.now } }],
       read: [{ userId: { type: Schema.Types.ObjectId, ref: 'User' }, at: { type: Date, default: Date.now } }],

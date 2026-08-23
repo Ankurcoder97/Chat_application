@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useChatStore } from '../../conversations/store/chatStore';
 import { useAuthStore } from '../../auth/store/authStore';
@@ -6,24 +6,64 @@ import { ChatHeader } from './ChatHeader';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
 import { Message } from '../../../shared/types';
-import { MessageSquare, ShieldCheck } from 'lucide-react';
+import { MessageSquare, ShieldCheck, WifiOff } from 'lucide-react';
 import api from '../../../shared/lib/axios';
 import { format, isSameDay, parseISO } from 'date-fns';
+import { localCache } from '../../../shared/lib/localCache';
+import { outboxManager } from '../../../shared/lib/outboxManager';
 
 export const ChatView: React.FC = () => {
   const { activeConversation, typingUsers } = useChatStore();
   const { user } = useAuthStore();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoadRef = useRef<boolean>(true);
+  const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
 
   const conversationId = activeConversation?.id;
+
+  // Track online/offline status
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const { data, isLoading } = useQuery<{ messages: Message[]; hasMore: boolean }>({
     queryKey: ['messages', conversationId],
     queryFn: async () => {
       if (!conversationId) return { messages: [], hasMore: false };
-      const { data } = await api.get(`/conversations/${conversationId}/messages`);
-      return data.data;
+      try {
+        const { data } = await api.get(`/conversations/${conversationId}/messages`);
+        const serverMessages: Message[] = data.data.messages || [];
+
+        // Save fresh messages to local offline cache
+        localCache.setMessages(conversationId, serverMessages);
+
+        return data.data;
+      } catch (err) {
+        console.warn('Network error fetching messages, loading from offline cache', err);
+        const cachedMessages = localCache.getMessages(conversationId);
+        return { messages: cachedMessages, hasMore: false };
+      }
+    },
+    initialData: () => {
+      if (!conversationId) return undefined;
+      const cached = localCache.getMessages(conversationId);
+      const queued = outboxManager.getQueuedMessages(conversationId);
+      const merged = [...cached];
+      queued.forEach((q) => {
+        if (!merged.some((m) => m.clientId === q.clientId || m.id === q.id)) {
+          merged.push(q);
+        }
+      });
+      return merged.length > 0 ? { messages: merged, hasMore: false } : undefined;
     },
     enabled: !!conversationId,
   });
@@ -51,14 +91,11 @@ export const ChatView: React.FC = () => {
   useLayoutEffect(() => {
     if (messages.length > 0) {
       if (isInitialLoadRef.current) {
-        // Immediate scroll on initial load (no smooth animation lag)
         scrollToBottom('auto');
-        // Extra frame tick to account for any image rendering
         requestAnimationFrame(() => scrollToBottom('auto'));
         setTimeout(() => scrollToBottom('auto'), 50);
         isInitialLoadRef.current = false;
       } else {
-        // Smooth scroll on new incoming/sent message
         scrollToBottom('smooth');
       }
     }
@@ -86,6 +123,14 @@ export const ChatView: React.FC = () => {
     <div className="flex flex-1 flex-col h-full w-full min-h-0 bg-surface-chat overflow-hidden relative">
       {/* Header: pinned strictly to top */}
       <ChatHeader />
+
+      {/* Offline Status Warning Bar */}
+      {isOffline && (
+        <div className="flex items-center justify-center space-x-2 bg-amber-500/15 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 py-1.5 px-3 text-xs border-b border-amber-500/20 z-20 flex-shrink-0 animate-message-in">
+          <WifiOff size={13} className="flex-shrink-0" />
+          <span>Offline mode &bull; Messages will be sent automatically when back online</span>
+        </div>
+      )}
 
       {/* Message Stream: isolated scroll container */}
       <div

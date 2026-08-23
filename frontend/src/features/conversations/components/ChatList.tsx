@@ -5,8 +5,9 @@ import { UserSearchModal } from './UserSearchModal';
 import { Conversation } from '../../../shared/types';
 import { useChatStore } from '../store/chatStore';
 import { useUIStore } from '../../../shared/store/uiStore';
-import { Search, Plus, MessageSquare, Phone, Moon, Sun, Settings as SettingsIcon } from 'lucide-react';
+import { Search, Plus, MessageSquare, Phone, Moon, Sun, Settings as SettingsIcon, WifiOff } from 'lucide-react';
 import api from '../../../shared/lib/axios';
+import { localCache } from '../../../shared/lib/localCache';
 
 export const ChatList: React.FC = () => {
   const { activeConversation, searchQuery, setSearchQuery } = useChatStore();
@@ -17,8 +18,19 @@ export const ChatList: React.FC = () => {
   const { data: conversations = [], isLoading } = useQuery<Conversation[]>({
     queryKey: ['conversations'],
     queryFn: async () => {
-      const { data } = await api.get('/conversations');
-      return data.data;
+      try {
+        const { data } = await api.get('/conversations');
+        const serverConvs: Conversation[] = data.data || [];
+        localCache.setConversations(serverConvs);
+        return serverConvs;
+      } catch (err) {
+        console.warn('Network error fetching conversations, loading cached conversations', err);
+        return localCache.getConversations();
+      }
+    },
+    initialData: () => {
+      const cached = localCache.getConversations();
+      return cached.length > 0 ? cached : undefined;
     },
     refetchInterval: 30000,
   });
@@ -52,7 +64,15 @@ export const ChatList: React.FC = () => {
           <div className="w-8 h-8 rounded-lg bg-accent-500 flex items-center justify-center text-white shadow-subtle">
             <MessageSquare size={18} className="fill-white" />
           </div>
-          <h1 className="text-lg font-bold text-text-primary tracking-tight">Nexus</h1>
+          <div className="flex items-center space-x-1.5">
+            <h1 className="text-lg font-bold text-text-primary tracking-tight">Nexus</h1>
+            {!navigator.onLine && (
+              <span className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-600 dark:text-amber-400 font-medium">
+                <WifiOff size={10} />
+                <span>Offline</span>
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center space-x-1">

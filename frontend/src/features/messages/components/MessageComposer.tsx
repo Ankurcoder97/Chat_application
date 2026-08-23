@@ -8,6 +8,8 @@ import api from '../../../shared/lib/axios';
 import { getSocket } from '../../../socket/socketClient';
 import { useQueryClient } from '@tanstack/react-query';
 import { Message } from '../../../shared/types';
+import { outboxManager } from '../../../shared/lib/outboxManager';
+import { transportManager } from '../../../shared/lib/transport/transportManager';
 
 const COMMON_EMOJIS = ['😊', '😂', '🔥', '❤️', '👍', '🙏', '🎉', '✨', '👋', '😍', '🤔', '🙌', '🚀', '💯'];
 
@@ -83,33 +85,42 @@ export const MessageComposer: React.FC = () => {
       isOptimistic: true,
     };
 
-    // 1. Optimistic update
+    // 1. Optimistic React Query cache update
     queryClient.setQueryData(['messages', convId], (old: any) => {
       if (!old) return { messages: [optimisticMessage], hasMore: false };
+      const exists = old.messages.some((m: Message) => m.clientId === clientId || m.id === clientId);
+      if (exists) return old;
       return { ...old, messages: [...old.messages, optimisticMessage] };
     });
 
-    // 2. Emit via socket (or REST fallback)
-    const socket = getSocket();
-    if (socket && socket.connected) {
-      socket.emit('message:send', {
-        clientId,
-        conversationId: convId,
-        content,
-        type: mediaPayload ? type : 'text',
-        media: mediaPayload,
-        replyToId: replyTo?.messageId,
-      });
-    } else {
-      // REST fallback
-      api.post(`/conversations/${convId}/messages`, {
-        clientId,
-        content,
-        type: mediaPayload ? type : 'text',
-        media: mediaPayload,
-        replyToId: replyTo?.messageId,
-      });
-    }
+    // 2. Dispatch via Multi-Transport (Internet -> Bluetooth -> Outbox Queue)
+    transportManager.dispatchMessage({
+      clientId,
+      conversationId: convId,
+      senderId: user.id,
+      recipientId: activeConversation.participant?.id,
+      content,
+      type: mediaPayload ? type : 'text',
+      media: mediaPayload,
+      replyToId: replyTo?.messageId,
+      sentAt: optimisticMessage.sentAt,
+    }).then(({ transport, deliveryState }) => {
+      optimisticMessage.transportType = transport;
+      optimisticMessage.deliveryState = deliveryState;
+    });
+
+    // 3. Queue in Outbox Manager (persists to local storage & flushes immediately when connection is available)
+    outboxManager.enqueue({
+      clientId,
+      conversationId: convId,
+      content,
+      type: mediaPayload ? type : 'text',
+      media: mediaPayload,
+      replyToId: replyTo?.messageId,
+      queuedAt: optimisticMessage.sentAt,
+      retryCount: 0,
+      optimisticMessage,
+    });
 
     setText('');
     setReplyTo(null);
