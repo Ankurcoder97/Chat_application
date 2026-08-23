@@ -11,6 +11,8 @@ const api = axios.create({
   },
 });
 
+const apiBaseUrl = api.defaults.baseURL || '/api/v1';
+
 let isRefreshing = false;
 let failedQueue: Array<{
   resolve: (value?: unknown) => void;
@@ -72,7 +74,7 @@ api.interceptors.response.use(
       }
 
       try {
-        const { data } = await axios.post('/api/v1/auth/refresh', { refreshToken });
+        const { data } = await axios.post(`${apiBaseUrl}/auth/refresh`, { refreshToken });
         const newAccessToken = data.data.accessToken;
         const newRefreshToken = data.data.refreshToken;
 

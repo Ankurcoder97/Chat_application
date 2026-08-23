@@ -15,6 +15,24 @@ export interface TokenPayload {
 }
 
 export class AuthService {
+  private getRefreshExpiryDate(): Date {
+    const match = config.JWT_REFRESH_EXPIRY.match(/^(\d+)([smhd])$/);
+    if (!match) {
+      return new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    }
+
+    const value = Number(match[1]);
+    const unit = match[2];
+    const multipliers: Record<string, number> = {
+      s: 1000,
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000,
+    };
+
+    return new Date(Date.now() + value * multipliers[unit]);
+  }
+
   private generateAccessToken(payload: TokenPayload): string {
     return jwt.sign(payload, config.JWT_ACCESS_SECRET, {
       expiresIn: config.JWT_ACCESS_EXPIRY as any,
@@ -97,7 +115,7 @@ export class AuthService {
 
     // Store session
     const refreshHash = await bcrypt.hash(refreshToken, 8);
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const expiresAt = this.getRefreshExpiryDate();
 
     await Session.create({
       userId: user._id,
@@ -148,7 +166,7 @@ export class AuthService {
     const deviceId = uuidv4();
 
     const refreshHash = await bcrypt.hash(refreshToken, 8);
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const expiresAt = this.getRefreshExpiryDate();
 
     await Session.create({
       userId: user._id,
@@ -213,6 +231,7 @@ export class AuthService {
     // Rotate session token
     matchedSession.refreshTokenHash = await bcrypt.hash(newRefreshToken, 8);
     matchedSession.lastActive = new Date();
+    matchedSession.expiresAt = this.getRefreshExpiryDate();
     await matchedSession.save();
 
     return {

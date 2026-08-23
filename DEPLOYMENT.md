@@ -33,6 +33,8 @@ Follow these step-by-step instructions to deploy Nexus Chat to **Render** (Backe
    | `REDIS_URL` | `redis://default:6078vQrZnAyitbWHXqXIH66H7v2UM2Ut@redis-19476.c11.us-east-1-2.ec2.cloud.redislabs.com:19476` |
    | `JWT_ACCESS_SECRET` | `fa97898c9c8f09731cbab90c93548443d7f66aa3d57ebc44a01e7919476e68098b33e7e2c83bb4ada2edd7cb7fc23b28` |
    | `JWT_REFRESH_SECRET` | `ac85f988ebfd56d5964144bbbaa9ede5214f67b9614135d9a24ec8bac7f9e8412225cfa88d3e18e679909753408d3365` |
+   | `JWT_ACCESS_EXPIRY` | `15m` |
+   | `JWT_REFRESH_EXPIRY` | `365d` |
    | `CORS_ORIGIN` | `*` *(or your Vercel URL later, e.g. `https://nexus-chat.vercel.app`)* |
 
 6. Click **Create Web Service**.

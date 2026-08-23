@@ -11,7 +11,7 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(16).default('nexus_access_secret_super_secure_key_123!'),
   JWT_REFRESH_SECRET: z.string().min(16).default('nexus_refresh_secret_super_secure_key_456!'),
   JWT_ACCESS_EXPIRY: z.string().default('15m'),
-  JWT_REFRESH_EXPIRY: z.string().default('30d'),
+  JWT_REFRESH_EXPIRY: z.string().default('365d'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   UPLOAD_DIR: z.string().default('uploads'),
   MAX_FILE_SIZE_MB: z.string().default('50').transform((v) => parseInt(v, 10)),
