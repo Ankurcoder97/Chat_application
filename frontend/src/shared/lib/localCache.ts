@@ -113,4 +113,70 @@ export const localCache = {
       console.warn('Failed to update message status in cache', e);
     }
   },
+
+  updateMessageDeliveryStatus(
+    conversationId: string,
+    messageId: string,
+    userId: string,
+    deliveredAt?: string
+  ) {
+    try {
+      const current = this.getMessages(conversationId);
+      const updated = current.map((m) => {
+        if (m.id === messageId) {
+          return {
+            ...m,
+            status: {
+              ...m.status,
+              delivered: [
+                ...(m.status?.delivered || []).filter((d: any) => d.userId !== userId),
+                { userId, at: deliveredAt || new Date().toISOString() },
+              ],
+            },
+          };
+        }
+        return m;
+      });
+      this.setMessages(conversationId, updated);
+    } catch (e) {
+      console.warn('Failed to update message delivery status in cache', e);
+    }
+  },
+
+  updateMessageReadStatus(
+    conversationId: string,
+    userId: string,
+    readAt?: string,
+    lastReadMessageId?: string
+  ) {
+    try {
+      const current = this.getMessages(conversationId);
+      const updated = current.map((m) => {
+        // Mark messages as read up to the lastReadMessageId
+        const shouldMarkRead =
+          !lastReadMessageId ||
+          m.id === lastReadMessageId ||
+          (m.seqNo &&
+            m.seqNo <=
+              (current.find((msg) => msg.id === lastReadMessageId)?.seqNo || 0));
+
+        if (shouldMarkRead && m.senderId !== userId) {
+          return {
+            ...m,
+            status: {
+              ...m.status,
+              read: [
+                ...(m.status?.read || []).filter((r: any) => r.userId !== userId),
+                { userId, at: readAt || new Date().toISOString() },
+              ],
+            },
+          };
+        }
+        return m;
+      });
+      this.setMessages(conversationId, updated);
+    } catch (e) {
+      console.warn('Failed to update message read status in cache', e);
+    }
+  },
 };

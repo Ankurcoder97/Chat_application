@@ -114,6 +114,18 @@ class OutboxManager {
     this.saveQueue();
   }
 
+  // Get failed messages (for debugging)
+  public getFailedMessages(): OutboxItem[] {
+    return this.queue.filter((item) => item.retryCount > 2);
+  }
+
+  // Clear messages older than 7 days
+  private cleanOldMessages() {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    this.queue = this.queue.filter((item) => new Date(item.queuedAt) > sevenDaysAgo);
+    this.saveQueue();
+  }
+
   // Sequentially flush all queued messages when online
   public async flushQueue() {
     if (this.isFlushing || this.queue.length === 0 || !this.isOnline()) {
@@ -122,10 +134,17 @@ class OutboxManager {
 
     this.isFlushing = true;
     console.log(`📤 Flushing ${this.queue.length} queued offline messages...`);
+    this.cleanOldMessages();
 
     const itemsToSend = [...this.queue];
 
     for (const item of itemsToSend) {
+      // Skip if already retried too many times
+      if (item.retryCount > 5) {
+        console.warn(`⚠️ Message [${item.clientId}] exceeded max retries, will keep in queue for manual review`);
+        continue;
+      }
+
       try {
         const socket = getSocket();
         let sentSuccessfully = false;
@@ -174,6 +193,8 @@ class OutboxManager {
         if (sentSuccessfully) {
           console.log(`✅ Queued message [${item.clientId}] sent successfully`);
           this.dequeue(item.clientId);
+          // Emit notification that message was sent
+          this.notify();
         }
       } catch (err) {
         console.warn(`⚠️ Failed to send queued message [${item.clientId}], will retry later`, err);
@@ -181,12 +202,14 @@ class OutboxManager {
         this.saveQueue();
         // If we hit a network failure, stop flushing until next network event
         if (!this.isOnline()) {
+          console.log('🔌 Network went offline, pausing flush queue');
           break;
         }
       }
     }
 
     this.isFlushing = false;
+    console.log(`✅ Flush queue completed. ${this.queue.length} messages remaining in queue`);
   }
 }
 

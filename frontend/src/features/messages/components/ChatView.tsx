@@ -55,14 +55,25 @@ export const ChatView: React.FC = () => {
     },
     initialData: () => {
       if (!conversationId) return undefined;
+      // Load from cache and merge with outbox queue, sorted by sentAt
       const cached = localCache.getMessages(conversationId);
       const queued = outboxManager.getQueuedMessages(conversationId);
-      const merged = [...cached];
-      queued.forEach((q) => {
-        if (!merged.some((m) => m.clientId === q.clientId || m.id === q.id)) {
-          merged.push(q);
+      
+      // Merge and deduplicate
+      const merged: Message[] = [];
+      const seen = new Set<string>();
+      
+      [...cached, ...queued].forEach((m) => {
+        const key = m.clientId || m.id;
+        if (!seen.has(key)) {
+          seen.add(key);
+          merged.push(m);
         }
       });
+      
+      // Sort by sentAt time
+      merged.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+      
       return merged.length > 0 ? { messages: merged, hasMore: false } : undefined;
     },
     enabled: !!conversationId,

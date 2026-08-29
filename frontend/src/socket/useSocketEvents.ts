@@ -87,44 +87,91 @@ export function useSocketEvents() {
             ...oldData,
             messages: oldData.messages.map((m: Message) =>
               m.clientId === clientId
-                ? { ...m, id: serverId, sentAt, seqNo, isOptimistic: false, hasError: false }
+                ? {
+                    ...m,
+                    id: serverId,
+                    sentAt,
+                    seqNo,
+                    isOptimistic: false,
+                    hasError: false,
+                    status: {
+                      ...m.status,
+                      delivered: [{ userId: user?.id || 'server', at: new Date().toISOString() }],
+                    },
+                  }
                 : m
             ),
           };
         });
+
+        // Persist the delivered status to cache as well
+        localCache.updateMessageDeliveryStatus(activeConversation.id, serverId, user?.id || 'server', sentAt);
       }
     };
 
     // 3. Delivered Status Update
-    const handleDelivered = ({ messageId, conversationId }: any) => {
+    const handleDelivered = ({ messageId, conversationId, userId, deliveredAt }: any) => {
       queryClient.setQueryData(['messages', conversationId], (oldData: any) => {
         if (!oldData) return oldData;
         return {
           ...oldData,
           messages: oldData.messages.map((m: Message) =>
             m.id === messageId
-              ? { ...m, status: { ...m.status, delivered: [{ userId: 'recipient', at: new Date().toISOString() }] } }
+              ? {
+                  ...m,
+                  status: {
+                    ...m.status,
+                    delivered: [
+                      ...(m.status?.delivered || []).filter((d: any) => d.userId !== userId),
+                      { userId, at: deliveredAt || new Date().toISOString() },
+                    ],
+                  },
+                }
               : m
           ),
         };
       });
+
+      // Persist to cache
+      if (activeConversation?.id === conversationId) {
+        localCache.updateMessageDeliveryStatus(conversationId, messageId, userId, deliveredAt);
+      }
     };
 
     // 4. Read Status Update
-    const handleRead = ({ conversationId }: any) => {
+    const handleRead = ({ conversationId, userId, readAt, lastReadMessageId }: any) => {
       queryClient.setQueryData(['messages', conversationId], (oldData: any) => {
         if (!oldData) return oldData;
         return {
           ...oldData,
-          messages: oldData.messages.map((m: Message) => ({
-            ...m,
-            status: {
-              ...m.status,
-              read: [{ userId: 'recipient', at: new Date().toISOString() }],
-            },
-          })),
+          messages: oldData.messages.map((m: Message) => {
+            // Only mark messages up to lastReadMessageId as read
+            const shouldMarkRead =
+              !lastReadMessageId ||
+              (m.id === lastReadMessageId ||
+                (m.seqNo && m.seqNo <= (oldData.messages.find((msg: any) => msg.id === lastReadMessageId)?.seqNo || 0)));
+
+            if (shouldMarkRead && m.senderId !== userId) {
+              return {
+                ...m,
+                status: {
+                  ...m.status,
+                  read: [
+                    ...(m.status?.read || []).filter((r: any) => r.userId !== userId),
+                    { userId, at: readAt || new Date().toISOString() },
+                  ],
+                },
+              };
+            }
+            return m;
+          }),
         };
       });
+
+      // Persist to cache
+      if (activeConversation?.id === conversationId) {
+        localCache.updateMessageReadStatus(conversationId, userId, readAt, lastReadMessageId);
+      }
     };
 
     // 5. Typing Indicators
