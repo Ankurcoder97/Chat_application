@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../../conversations/store/chatStore';
 import { useAuthStore } from '../../auth/store/authStore';
 import { ChatHeader } from './ChatHeader';
@@ -11,29 +11,104 @@ import api from '../../../shared/lib/axios';
 import { format, isSameDay, parseISO } from 'date-fns';
 import { localCache } from '../../../shared/lib/localCache';
 import { outboxManager } from '../../../shared/lib/outboxManager';
+import { offlineDirectChannel } from '../../../shared/lib/transport/offlineDirectChannel';
 
 export const ChatView: React.FC = () => {
   const { activeConversation, typingUsers } = useChatStore();
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoadRef = useRef<boolean>(true);
   const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
 
   const conversationId = activeConversation?.id;
 
-  // Track online/offline status
+  // Track online/offline status & Direct Offline P2P Events
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 
+    const handleDirectMessageReceived = (e: any) => {
+      const newMsg = e.detail;
+      if (!newMsg || newMsg.conversationId !== conversationId) return;
+
+      queryClient.setQueryData(['messages', conversationId], (old: any) => {
+        if (!old) return { messages: [newMsg], hasMore: false };
+        const exists = old.messages.some((m: Message) => m.clientId === newMsg.clientId || m.id === newMsg.clientId);
+        if (exists) return old;
+        return { ...old, messages: [...old.messages, newMsg] };
+      });
+
+      // Send read receipt if this chat is active
+      if (conversationId) {
+        offlineDirectChannel.sendReadReceipt(newMsg.clientId, conversationId);
+      }
+    };
+
+    const handleDirectMessageDelivered = (e: any) => {
+      const { clientId, conversationId: convId, deliveredAt } = e.detail || {};
+      if (convId !== conversationId) return;
+
+      queryClient.setQueryData(['messages', conversationId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          messages: old.messages.map((m: Message) =>
+            m.clientId === clientId || m.id === clientId
+              ? {
+                  ...m,
+                  isOptimistic: false,
+                  deliveryState: 'DELIVERED',
+                  status: {
+                    ...m.status,
+                    delivered: [{ userId: 'peer', at: deliveredAt || new Date().toISOString() }],
+                  },
+                }
+              : m
+          ),
+        };
+      });
+    };
+
+    const handleDirectMessageRead = (e: any) => {
+      const { clientId, conversationId: convId, readAt } = e.detail || {};
+      if (convId !== conversationId) return;
+
+      queryClient.setQueryData(['messages', conversationId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          messages: old.messages.map((m: Message) =>
+            m.clientId === clientId || m.id === clientId
+              ? {
+                  ...m,
+                  isOptimistic: false,
+                  deliveryState: 'READ',
+                  status: {
+                    ...m.status,
+                    read: [{ userId: 'peer', at: readAt || new Date().toISOString() }],
+                  },
+                }
+              : m
+          ),
+        };
+      });
+    };
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('nexus_direct_message_received', handleDirectMessageReceived);
+    window.addEventListener('nexus_message_delivered', handleDirectMessageDelivered);
+    window.addEventListener('nexus_message_read', handleDirectMessageRead);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('nexus_direct_message_received', handleDirectMessageReceived);
+      window.removeEventListener('nexus_message_delivered', handleDirectMessageDelivered);
+      window.removeEventListener('nexus_message_read', handleDirectMessageRead);
     };
-  }, []);
+  }, [conversationId, queryClient]);
 
   const { data, isLoading } = useQuery<{ messages: Message[]; hasMore: boolean }>({
     queryKey: ['messages', conversationId],

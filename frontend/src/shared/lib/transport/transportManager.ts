@@ -3,6 +3,7 @@ import api from '../axios';
 import { localCache } from '../localCache';
 import { outboxManager } from '../outboxManager';
 import { bluetoothTransport } from './bluetoothTransport';
+import { offlineDirectChannel } from './offlineDirectChannel';
 import { BluetoothMessagePayload, DeliveryState, TransportType } from './types';
 
 class TransportManager {
@@ -21,7 +22,7 @@ class TransportManager {
     if (this.isOnline() && getSocket()?.connected) {
       return 'internet';
     }
-    if (bluetoothTransport.isAvailable()) {
+    if (offlineDirectChannel.isConnected() || bluetoothTransport.isAvailable()) {
       return 'bluetooth';
     }
     return 'offline_queue';
@@ -50,8 +51,15 @@ class TransportManager {
       }
     }
 
-    // 2. Bluetooth Transport (Device A -> Device B)
-    if (transport === 'bluetooth') {
+    // 2. Direct Offline P2P / Bluetooth Transport
+    if (offlineDirectChannel.isConnected()) {
+      const sent = await offlineDirectChannel.sendMessage(payload);
+      if (sent) {
+        return { transport: 'bluetooth', deliveryState: 'BLUETOOTH_TRANSFER' };
+      }
+    }
+
+    if (bluetoothTransport.isAvailable()) {
       const success = await bluetoothTransport.send(payload);
       if (success) {
         return { transport: 'bluetooth', deliveryState: 'BLUETOOTH_TRANSFER' };
@@ -62,9 +70,9 @@ class TransportManager {
     return { transport: 'offline_queue', deliveryState: 'PENDING_LOCAL' };
   }
 
-  // Handle incoming message received over Bluetooth (Relay Node / Device B logic)
+  // Handle incoming message received over Bluetooth / Direct channel
   public async handleInboundBluetoothMessage(message: BluetoothMessagePayload) {
-    console.log(`📡 Inbound Bluetooth message received from [${message.senderId}]: "${message.content}"`);
+    console.log(`📡 Inbound direct message received from [${message.senderId}]: "${message.content}"`);
 
     // 1. Persist to local cache immediately
     localCache.appendMessage(message.conversationId, {
@@ -78,7 +86,10 @@ class TransportManager {
       media: message.media,
       replyTo: message.replyToId ? { messageId: message.replyToId, senderId: '', content: '', type: 'text' } : null,
       reactions: [],
-      status: { delivered: [], read: [] },
+      status: {
+        delivered: [{ userId: message.recipientId || 'peer', at: new Date().toISOString() }],
+        read: [],
+      },
       sentAt: message.sentAt || new Date().toISOString(),
       transportType: 'bluetooth',
       deliveryState: 'BLUETOOTH_RECEIVED',
@@ -91,11 +102,13 @@ class TransportManager {
       type: message.type || 'text',
     });
 
-    // 2. If Device B has active Internet connection, relay to backend /messages/sync immediately!
+    // Send delivery receipt back
+    offlineDirectChannel.sendDeliveryReceipt(message.clientId, message.conversationId);
+
+    // 2. If Device has active Internet connection, relay to backend /messages/sync immediately!
     if (this.isOnline()) {
       await this.relayMessageToServer(message);
     } else {
-      // Queue in outbox for subsequent relay when internet becomes available
       outboxManager.enqueue({
         clientId: message.clientId,
         conversationId: message.conversationId,
@@ -115,7 +128,7 @@ class TransportManager {
           content: message.content,
           media: message.media,
           reactions: [],
-          status: { delivered: [], read: [] },
+          status: { delivered: [{ userId: 'peer', at: new Date().toISOString() }], read: [] },
           sentAt: message.sentAt,
           transportType: 'bluetooth',
           deliveryState: 'SYNC_PENDING',
