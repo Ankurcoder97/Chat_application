@@ -11,12 +11,14 @@ import {
   Copy,
   Zap,
   CheckCircle2,
+  Camera,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { offlineDirectChannel } from '../../../shared/lib/transport/offlineDirectChannel';
 import { bluetoothTransport } from '../../../shared/lib/transport/bluetoothTransport';
 import { BluetoothPeerDevice } from '../../../shared/lib/transport/types';
 import { outboxManager } from '../../../shared/lib/outboxManager';
+import { QRScanner } from '../../../shared/components/QRScanner';
 
 interface BluetoothScanModalProps {
   isOpen: boolean;
@@ -24,7 +26,7 @@ interface BluetoothScanModalProps {
 }
 
 export const BluetoothScanModal: React.FC<BluetoothScanModalProps> = ({ isOpen, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'quick' | 'qr' | 'ble'>('quick');
+  const [activeTab, setActiveTab] = useState<'quick' | 'qr'>('qr');
   const [isConnected, setIsConnected] = useState(false);
   const [connectedPeer, setConnectedPeer] = useState<BluetoothPeerDevice | null>(null);
 
@@ -36,6 +38,7 @@ export const BluetoothScanModal: React.FC<BluetoothScanModalProps> = ({ isOpen, 
   const [inputToken, setInputToken] = useState('');
   const [copied, setCopied] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   const queuedCount = outboxManager.getQueuedCount();
 
@@ -57,6 +60,7 @@ export const BluetoothScanModal: React.FC<BluetoothScanModalProps> = ({ isOpen, 
   const handleStartHost = async () => {
     setIsProcessing(true);
     setQrStep('host');
+    setShowScanner(false);
     try {
       const offer = await offlineDirectChannel.createPairingOffer();
       setOfferToken(offer);
@@ -69,28 +73,30 @@ export const BluetoothScanModal: React.FC<BluetoothScanModalProps> = ({ isOpen, 
     }
   };
 
-  // Join QR Flow: Device B accepts Offer & generates Answer
-  const handleAcceptOffer = async () => {
-    if (!inputToken.trim()) return;
+  // Join QR Flow: Device B processes scanned/entered Offer & generates Answer
+  const processOfferToken = async (token: string) => {
+    if (!token.trim()) return;
     setIsProcessing(true);
+    setShowScanner(false);
     try {
-      const answer = await offlineDirectChannel.acceptPairingOffer(inputToken.trim());
+      const answer = await offlineDirectChannel.acceptPairingOffer(token.trim());
       setAnswerToken(answer);
       const url = await QRCode.toDataURL(answer, { width: 220, margin: 1 });
       setQrDataUrl(url);
     } catch (e) {
-      alert('Invalid pairing code. Please make sure the entire code is copied.');
+      alert('Invalid pairing QR code. Please scan Device A again.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Host completes handshake by applying Answer
-  const handleCompleteAnswer = async () => {
-    if (!inputToken.trim()) return;
+  // Host completes handshake by processing scanned/entered Answer
+  const processAnswerToken = async (token: string) => {
+    if (!token.trim()) return;
     setIsProcessing(true);
+    setShowScanner(false);
     try {
-      const ok = await offlineDirectChannel.completePairing(inputToken.trim());
+      const ok = await offlineDirectChannel.completePairing(token.trim());
       if (ok) {
         setQrStep('idle');
         setInputToken('');
@@ -116,6 +122,7 @@ export const BluetoothScanModal: React.FC<BluetoothScanModalProps> = ({ isOpen, 
     setOfferToken('');
     setAnswerToken('');
     setInputToken('');
+    setShowScanner(false);
   };
 
   return (
@@ -125,9 +132,9 @@ export const BluetoothScanModal: React.FC<BluetoothScanModalProps> = ({ isOpen, 
         <div className="flex items-start space-x-3 p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-700 dark:text-cyan-300 text-xs">
           <Bluetooth size={20} className="flex-shrink-0 mt-0.5" />
           <div className="flex flex-col space-y-1">
-            <span className="font-semibold">Zero-Internet Direct Mesh</span>
+            <span className="font-semibold">Direct Camera QR Pairing</span>
             <p className="text-text-secondary leading-relaxed">
-              Send, deliver, and view read receipts between two offline devices in real-time over direct Bluetooth / Local Hotspot P2P with zero internet required.
+              Scan your friend's screen with your camera to pair instantly offline. Send messages, delivery ticks, and read receipts with zero internet!
             </p>
           </div>
         </div>
@@ -170,25 +177,187 @@ export const BluetoothScanModal: React.FC<BluetoothScanModalProps> = ({ isOpen, 
         {!isConnected && (
           <div className="flex items-center space-x-1 p-1 bg-surface-muted rounded-xl border border-border-default/60">
             <button
-              onClick={() => setActiveTab('quick')}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                activeTab === 'quick' ? 'bg-surface-elevated text-text-primary shadow-subtle' : 'text-text-secondary'
-              }`}
-            >
-              1-Click Fast Pair
-            </button>
-            <button
               onClick={() => setActiveTab('qr')}
               className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 activeTab === 'qr' ? 'bg-surface-elevated text-text-primary shadow-subtle' : 'text-text-secondary'
               }`}
             >
-              QR / Token Pairing
+              Camera QR Pairing
+            </button>
+            <button
+              onClick={() => setActiveTab('quick')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                activeTab === 'quick' ? 'bg-surface-elevated text-text-primary shadow-subtle' : 'text-text-secondary'
+              }`}
+            >
+              1-Click Fast Connect
             </button>
           </div>
         )}
 
-        {/* TAB 1: 1-Click Fast Connect */}
+        {/* TAB 1: Camera QR Handshake Flow */}
+        {!isConnected && activeTab === 'qr' && (
+          <div className="flex flex-col space-y-3">
+            {qrStep === 'idle' && (
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* Device A: Host */}
+                <button
+                  onClick={handleStartHost}
+                  disabled={isProcessing}
+                  className="p-4 rounded-2xl border border-border-default bg-surface-muted/50 hover:bg-surface-muted flex flex-col items-center space-y-2 text-center transition-all group"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-accent-500/10 text-accent-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <QrCode size={22} />
+                  </div>
+                  <span className="text-xs font-semibold text-text-primary">Device A: Host</span>
+                  <span className="text-[10px] text-text-tertiary">Show Pairing QR Code</span>
+                </button>
+
+                {/* Device B: Join / Scan */}
+                <button
+                  onClick={() => {
+                    setQrStep('join');
+                    setShowScanner(true);
+                  }}
+                  className="p-4 rounded-2xl border border-border-default bg-surface-muted/50 hover:bg-surface-muted flex flex-col items-center space-y-2 text-center transition-all group"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Camera size={22} />
+                  </div>
+                  <span className="text-xs font-semibold text-text-primary">Device B: Scan QR</span>
+                  <span className="text-[10px] text-text-tertiary">Scan Device A with Camera</span>
+                </button>
+              </div>
+            )}
+
+            {/* Step: Host Displaying Offer QR Code */}
+            {qrStep === 'host' && (
+              <div className="flex flex-col items-center space-y-3 text-center">
+                {showScanner ? (
+                  <div className="w-full flex flex-col space-y-2">
+                    <span className="text-xs font-semibold text-text-primary">Point camera at Device B's Answer QR:</span>
+                    <QRScanner onScan={(data) => processAnswerToken(data)} onClose={() => setShowScanner(false)} />
+                  </div>
+                ) : (
+                  <>
+                    {qrDataUrl ? (
+                      <div className="p-3.5 bg-white rounded-2xl shadow-elevated border border-border-subtle">
+                        <img src={qrDataUrl} alt="Pairing QR" className="w-48 h-48 rounded-xl" />
+                      </div>
+                    ) : (
+                      <div className="w-48 h-48 rounded-2xl bg-surface-muted flex items-center justify-center">
+                        <RefreshCw size={24} className="animate-spin text-accent-500" />
+                      </div>
+                    )}
+
+                    <p className="text-xs text-text-secondary">
+                      Ask Device B to tap <strong>"Device B: Scan QR"</strong> and point their camera at this QR code.
+                    </p>
+
+                    <button
+                      onClick={() => setShowScanner(true)}
+                      className="w-full py-2.5 px-4 rounded-xl bg-accent-500 hover:bg-accent-600 text-white text-xs font-semibold shadow-subtle flex items-center justify-center space-x-2 transition-transform active:scale-98"
+                    >
+                      <Camera size={15} />
+                      <span>Scan Device B's Answer QR with Camera</span>
+                    </button>
+
+                    <div className="flex items-center space-x-2 w-full pt-1">
+                      <button
+                        onClick={() => handleCopy(offerToken)}
+                        className="flex-1 py-1.5 px-3 rounded-xl bg-surface-muted hover:bg-surface-elevated border border-border-default text-xs font-medium flex items-center justify-center space-x-1.5 transition-colors"
+                      >
+                        {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                        <span>{copied ? 'Copied!' : 'Copy Code'}</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                <button
+                  onClick={() => {
+                    setQrStep('idle');
+                    setShowScanner(false);
+                  }}
+                  className="text-xs text-text-tertiary hover:text-text-primary pt-1"
+                >
+                  &larr; Back
+                </button>
+              </div>
+            )}
+
+            {/* Step: Device B Scan & Answer Display */}
+            {qrStep === 'join' && (
+              <div className="flex flex-col space-y-3 text-center">
+                {showScanner ? (
+                  <div className="w-full flex flex-col space-y-2">
+                    <span className="text-xs font-semibold text-text-primary">Scan Device A's QR Code:</span>
+                    <QRScanner onScan={(data) => processOfferToken(data)} onClose={() => setShowScanner(false)} />
+                  </div>
+                ) : answerToken ? (
+                  <div className="flex flex-col items-center space-y-3">
+                    <span className="text-xs font-semibold text-text-primary">Show this Answer QR to Device A:</span>
+                    <div className="p-3.5 bg-white rounded-2xl shadow-elevated border border-border-subtle">
+                      <img src={qrDataUrl!} alt="Answer QR" className="w-48 h-48 rounded-xl" />
+                    </div>
+                    <p className="text-xs text-text-secondary">
+                      Device A scans this QR code to complete the direct offline link!
+                    </p>
+                    <button
+                      onClick={() => handleCopy(answerToken)}
+                      className="w-full py-2 px-3 rounded-xl bg-surface-muted hover:bg-surface-elevated border border-border-default text-xs font-medium flex items-center justify-center space-x-1.5"
+                    >
+                      {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                      <span>{copied ? 'Copied Answer!' : 'Copy Answer Code'}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col space-y-3">
+                    <button
+                      onClick={() => setShowScanner(true)}
+                      className="w-full py-3 px-4 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold shadow-subtle flex items-center justify-center space-x-2"
+                    >
+                      <Camera size={16} />
+                      <span>Open Camera QR Scanner</span>
+                    </button>
+
+                    <div className="pt-2 border-t border-border-subtle flex flex-col space-y-2 text-left">
+                      <label className="text-xs font-medium text-text-secondary">Or Paste Pairing Code Manually:</label>
+                      <textarea
+                        rows={2}
+                        placeholder="Paste code here..."
+                        value={inputToken}
+                        onChange={(e) => setInputToken(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-surface-muted border border-border-default rounded-xl focus:outline-none focus:border-accent-500 text-text-primary font-mono resize-none"
+                      />
+                      <button
+                        onClick={() => processOfferToken(inputToken)}
+                        disabled={!inputToken.trim() || isProcessing}
+                        className="w-full py-2 bg-accent-500 hover:bg-accent-600 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-colors"
+                      >
+                        {isProcessing ? 'Processing...' : 'Submit Code'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => {
+                    setQrStep('idle');
+                    setShowScanner(false);
+                    setAnswerToken('');
+                    setInputToken('');
+                  }}
+                  className="text-xs text-text-tertiary hover:text-text-primary self-center pt-1"
+                >
+                  &larr; Back
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: 1-Click Fast Connect */}
         {!isConnected && activeTab === 'quick' && (
           <div className="flex flex-col space-y-3 py-2 text-center">
             <div className="p-4 rounded-2xl bg-surface-muted/60 border border-border-subtle flex flex-col items-center space-y-2">
@@ -207,144 +376,6 @@ export const BluetoothScanModal: React.FC<BluetoothScanModalProps> = ({ isOpen, 
                 <span>Connect Direct Offline Mesh</span>
               </button>
             </div>
-          </div>
-        )}
-
-        {/* TAB 2: QR / Handshake Token Flow */}
-        {!isConnected && activeTab === 'qr' && (
-          <div className="flex flex-col space-y-3">
-            {qrStep === 'idle' && (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={handleStartHost}
-                  disabled={isProcessing}
-                  className="p-4 rounded-2xl border border-border-default bg-surface-muted/50 hover:bg-surface-muted flex flex-col items-center space-y-2 text-center transition-all group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-accent-500/10 text-accent-500 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <QrCode size={20} />
-                  </div>
-                  <span className="text-xs font-semibold text-text-primary">Device A: Host</span>
-                  <span className="text-[10px] text-text-tertiary">Generate QR Code / Pairing Token</span>
-                </button>
-
-                <button
-                  onClick={() => setQrStep('join')}
-                  className="p-4 rounded-2xl border border-border-default bg-surface-muted/50 hover:bg-surface-muted flex flex-col items-center space-y-2 text-center transition-all group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-500 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Radio size={20} />
-                  </div>
-                  <span className="text-xs font-semibold text-text-primary">Device B: Join</span>
-                  <span className="text-[10px] text-text-tertiary">Enter / Paste Device A's Code</span>
-                </button>
-              </div>
-            )}
-
-            {/* Host Step: Displaying Offer QR / Token */}
-            {qrStep === 'host' && (
-              <div className="flex flex-col items-center space-y-3 text-center">
-                {qrDataUrl ? (
-                  <div className="p-3 bg-white rounded-2xl shadow-elevated">
-                    <img src={qrDataUrl} alt="Pairing QR" className="w-44 h-44 rounded-xl" />
-                  </div>
-                ) : (
-                  <div className="w-44 h-44 rounded-2xl bg-surface-muted flex items-center justify-center">
-                    <RefreshCw size={24} className="animate-spin text-accent-500" />
-                  </div>
-                )}
-
-                <div className="flex items-center space-x-2 w-full">
-                  <button
-                    onClick={() => handleCopy(offerToken)}
-                    className="flex-1 py-2 px-3 rounded-xl bg-surface-muted hover:bg-surface-elevated border border-border-default text-xs font-medium flex items-center justify-center space-x-1.5 transition-colors"
-                  >
-                    {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                    <span>{copied ? 'Copied Code!' : 'Copy Pairing Token'}</span>
-                  </button>
-                </div>
-
-                <div className="w-full pt-2 border-t border-border-subtle flex flex-col space-y-2 text-left">
-                  <label className="text-xs font-medium text-text-secondary">Paste Device B's Answer Token:</label>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="text"
-                      placeholder="Paste answer token here..."
-                      value={inputToken}
-                      onChange={(e) => setInputToken(e.target.value)}
-                      className="flex-1 px-3 py-2 text-xs bg-surface-muted border border-border-default rounded-xl focus:outline-none focus:border-accent-500 text-text-primary font-mono"
-                    />
-                    <button
-                      onClick={handleCompleteAnswer}
-                      disabled={!inputToken.trim() || isProcessing}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-colors"
-                    >
-                      Connect
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setQrStep('idle')}
-                  className="text-xs text-text-tertiary hover:text-text-primary"
-                >
-                  &larr; Back
-                </button>
-              </div>
-            )}
-
-            {/* Join Step: Device B Enters Host Token */}
-            {qrStep === 'join' && (
-              <div className="flex flex-col space-y-3">
-                {!answerToken ? (
-                  <>
-                    <label className="text-xs font-medium text-text-secondary">
-                      Paste Device A's Pairing Token:
-                    </label>
-                    <textarea
-                      rows={3}
-                      placeholder="Paste Device A's pairing code here..."
-                      value={inputToken}
-                      onChange={(e) => setInputToken(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-surface-muted border border-border-default rounded-xl focus:outline-none focus:border-accent-500 text-text-primary font-mono resize-none"
-                    />
-                    <button
-                      onClick={handleAcceptOffer}
-                      disabled={!inputToken.trim() || isProcessing}
-                      className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-colors"
-                    >
-                      {isProcessing ? 'Generating Answer...' : 'Generate Answer Code'}
-                    </button>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center space-y-3 text-center">
-                    <div className="p-3 bg-white rounded-2xl shadow-elevated">
-                      <img src={qrDataUrl!} alt="Answer QR" className="w-44 h-44 rounded-xl" />
-                    </div>
-                    <button
-                      onClick={() => handleCopy(answerToken)}
-                      className="w-full py-2 px-3 rounded-xl bg-surface-muted hover:bg-surface-elevated border border-border-default text-xs font-medium flex items-center justify-center space-x-1.5"
-                    >
-                      {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                      <span>{copied ? 'Copied Answer!' : 'Copy Answer Token'}</span>
-                    </button>
-                    <p className="text-[11px] text-text-tertiary">
-                      Paste this answer token back on Device A to complete the connection.
-                    </p>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => {
-                    setQrStep('idle');
-                    setAnswerToken('');
-                    setInputToken('');
-                  }}
-                  className="text-xs text-text-tertiary hover:text-text-primary self-center"
-                >
-                  &larr; Back
-                </button>
-              </div>
-            )}
           </div>
         )}
 
