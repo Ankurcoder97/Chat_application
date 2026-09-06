@@ -1,6 +1,34 @@
+import { deflate, inflate } from 'pako';
 import { localCache } from '../localCache';
 import { outboxManager } from '../outboxManager';
 import { BluetoothMessagePayload, BluetoothPeerDevice } from './types';
+
+function compressSDP(desc: RTCSessionDescriptionInit): string {
+  const jsonStr = JSON.stringify(desc);
+  const deflated = deflate(jsonStr);
+  let binary = '';
+  const len = deflated.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(deflated[i]);
+  }
+  return btoa(binary);
+}
+
+function decompressSDP(token: string): RTCSessionDescriptionInit {
+  try {
+    const binary = atob(token.trim());
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const inflatedBytes = inflate(bytes);
+    const jsonStr = new TextDecoder().decode(inflatedBytes);
+    return JSON.parse(jsonStr);
+  } catch {
+    // Fallback if uncompressed Base64 is passed
+    return JSON.parse(atob(token.trim()));
+  }
+}
 
 export type DirectPacketType =
   | 'MSG_SEND'
@@ -89,7 +117,7 @@ class OfflineDirectChannelManager {
       }
     });
 
-    const offerToken = btoa(JSON.stringify(pc.localDescription));
+    const offerToken = compressSDP(pc.localDescription!);
     return offerToken;
   }
 
@@ -103,7 +131,7 @@ class OfflineDirectChannelManager {
     const dc = pc.createDataChannel('nexus_offline_chat', { negotiated: true, id: 0 });
     this.setupDataChannel(dc);
 
-    const offerDesc = JSON.parse(atob(offerToken));
+    const offerDesc = decompressSDP(offerToken);
     await pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
 
     const answer = await pc.createAnswer();
@@ -132,7 +160,7 @@ class OfflineDirectChannelManager {
     };
     this.notifyStatus();
 
-    const answerToken = btoa(JSON.stringify(pc.localDescription));
+    const answerToken = compressSDP(pc.localDescription!);
     return answerToken;
   }
 
@@ -140,7 +168,7 @@ class OfflineDirectChannelManager {
   public async completePairing(answerToken: string, peerName = 'Nearby Contact'): Promise<boolean> {
     if (!this.peerConnection) return false;
     try {
-      const answerDesc = JSON.parse(atob(answerToken));
+      const answerDesc = decompressSDP(answerToken);
       await this.peerConnection.setRemoteDescription(new RTCSessionDescription(answerDesc));
 
       this.connectedPeer = {

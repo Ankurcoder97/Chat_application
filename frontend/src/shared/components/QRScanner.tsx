@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
-import { Camera, CameraOff, RefreshCw, X } from 'lucide-react';
+import { Camera, CameraOff, RefreshCw, X, Image as ImageIcon } from 'lucide-react';
 
 interface QRScannerProps {
   onScan: (data: string) => void;
@@ -10,6 +10,7 @@ interface QRScannerProps {
 export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(true);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
@@ -24,22 +25,22 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facingMode },
-          width: { ideal: 640 },
-          height: { ideal: 480 },
+          width: { min: 640, ideal: 1280 },
+          height: { min: 480, ideal: 720 },
         },
       });
 
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', 'true'); // Required for iOS Safari
+        videoRef.current.setAttribute('playsinline', 'true');
         await videoRef.current.play();
         setIsScanning(true);
         startScanningLoop();
       }
     } catch (err: any) {
       console.error('Camera access error:', err);
-      setError('Unable to access camera. Please allow camera permissions in your browser.');
+      setError('Unable to access camera. Please allow camera permissions in your browser or upload a QR image.');
     }
   };
 
@@ -71,7 +72,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-        // 1. Try Native BarcodeDetector if supported
+        // 1. Try Native BarcodeDetector
         if ('BarcodeDetector' in window) {
           try {
             const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
@@ -86,13 +87,13 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
               }
             }
           } catch {
-            // Fallback to jsQR below
+            // Fallback to jsQR
           }
         }
 
-        // 2. jsQR Engine Fallback
+        // 2. jsQR Engine Fallback with 'attemptBoth' (light on dark & dark on light)
         const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'dontInvert',
+          inversionAttempts: 'attemptBoth',
         });
 
         if (code && code.data) {
@@ -109,6 +110,34 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
     scanAnimationId.current = requestAnimationFrame(scanFrame);
   };
 
+  // Image Upload Scanner Fallback
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth',
+        });
+        if (code && code.data) {
+          stopCamera();
+          onScan(code.data);
+        } else {
+          alert('Could not find a valid QR code in the selected image.');
+        }
+      }
+    };
+    img.src = URL.createObjectURL(file);
+  };
+
   useEffect(() => {
     startCamera();
     return () => {
@@ -122,8 +151,14 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
 
   return (
     <div className="relative flex flex-col items-center justify-center w-full bg-black rounded-2xl overflow-hidden shadow-elevated border border-border-default/60">
-      {/* Hidden Canvas for Frame Processing */}
       <canvas ref={canvasRef} className="hidden" />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageUpload}
+      />
 
       {/* Video Feed */}
       <video
@@ -137,13 +172,10 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
       {isScanning && !error && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="w-48 h-48 sm:w-52 sm:h-52 border-2 border-accent-500 rounded-2xl relative shadow-lg">
-            {/* Corner Accents */}
             <div className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-accent-400 rounded-tl-lg" />
             <div className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-accent-400 rounded-tr-lg" />
             <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-accent-400 rounded-bl-lg" />
             <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-accent-400 rounded-br-lg" />
-
-            {/* Laser Line Animation */}
             <div className="w-full h-0.5 bg-accent-400/80 shadow-[0_0_8px_#38bdf8] animate-bounce mt-24" />
           </div>
         </div>
@@ -151,6 +183,13 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
 
       {/* Controls Overlay */}
       <div className="absolute top-2.5 right-2.5 flex items-center space-x-1.5 z-10">
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="p-2 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-sm transition-colors"
+          title="Upload QR image"
+        >
+          <ImageIcon size={16} />
+        </button>
         <button
           onClick={toggleCamera}
           className="p-2 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-sm transition-colors"
@@ -175,20 +214,28 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
       {/* Instruction Banner */}
       <div className="absolute bottom-2.5 inset-x-4 flex items-center justify-center bg-black/60 backdrop-blur-md py-1.5 px-3 rounded-xl text-[11px] text-white/90 text-center pointer-events-none">
         <Camera size={13} className="mr-1.5 text-accent-400" />
-        <span>Align the QR code within the frame to pair</span>
+        <span>Align QR in box or tap image icon to upload photo</span>
       </div>
 
       {/* Error state */}
       {error && (
-        <div className="absolute inset-0 bg-surface-base/95 p-6 flex flex-col items-center justify-center text-center space-y-3">
+        <div className="absolute inset-0 bg-surface-base/95 p-6 flex flex-col items-center justify-center text-center space-y-3 z-20">
           <CameraOff size={32} className="text-rose-500" />
           <p className="text-xs text-text-primary font-medium">{error}</p>
-          <button
-            onClick={startCamera}
-            className="px-4 py-2 bg-accent-500 hover:bg-accent-600 text-white rounded-xl text-xs font-semibold"
-          >
-            Retry Camera
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={startCamera}
+              className="px-4 py-2 bg-accent-500 hover:bg-accent-600 text-white rounded-xl text-xs font-semibold"
+            >
+              Retry Camera
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 bg-surface-muted hover:bg-surface-elevated text-text-primary rounded-xl text-xs font-semibold"
+            >
+              Choose Image
+            </button>
+          </div>
         </div>
       )}
     </div>
