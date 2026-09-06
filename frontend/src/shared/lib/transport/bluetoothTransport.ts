@@ -79,13 +79,13 @@ class BluetoothTransportService implements ITransport {
     if (typeof navigator !== 'undefined' && (navigator as any).bluetooth) {
       try {
         const device = await (navigator as any).bluetooth.requestDevice({
-          filters: [{ namePrefix: 'Nexus' }, { services: [NEXUS_BLE_SERVICE_UUID] }],
+          acceptAllDevices: true,
           optionalServices: [NEXUS_BLE_SERVICE_UUID],
         });
 
         const peer: BluetoothPeerDevice = {
           id: device.id,
-          name: device.name || 'Nearby Device',
+          name: device.name || 'Nearby Bluetooth Device',
           device,
           connected: false,
           lastSeen: Date.now(),

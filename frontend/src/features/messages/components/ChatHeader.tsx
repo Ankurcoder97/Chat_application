@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, MoreVertical, Phone, Video, Bluetooth } from 'lucide-react';
 import { Avatar } from '../../../shared/components/Avatar';
 import { useChatStore } from '../../conversations/store/chatStore';
@@ -6,18 +6,30 @@ import { useCallStore } from '../../calls/store/callStore';
 import { formatLastSeen } from '../../../shared/lib/utils';
 import { BluetoothScanModal } from './BluetoothScanModal';
 import { bluetoothTransport } from '../../../shared/lib/transport/bluetoothTransport';
+import { offlineDirectChannel } from '../../../shared/lib/transport/offlineDirectChannel';
+import { BluetoothPeerDevice } from '../../../shared/lib/transport/types';
 
 export const ChatHeader: React.FC = () => {
   const { activeConversation, setActiveConversation, typingUsers, onlineUsers } = useChatStore();
   const { startOutgoingCall } = useCallStore();
   const [isBtModalOpen, setIsBtModalOpen] = useState(false);
+  const [isDirectConnected, setIsDirectConnected] = useState(false);
+  const [connectedDirectPeer, setConnectedDirectPeer] = useState<BluetoothPeerDevice | null>(null);
+
+  useEffect(() => {
+    const unsub = offlineDirectChannel.subscribeStatus((connected, peer) => {
+      setIsDirectConnected(connected);
+      setConnectedDirectPeer(peer);
+    });
+    return unsub;
+  }, []);
 
   if (!activeConversation || !activeConversation.participant) return null;
 
   const participant = activeConversation.participant;
   const isTyping = typingUsers[activeConversation.id];
   const isOnline = onlineUsers.has(participant.id) || participant.isOnline;
-  const isBtConnected = bluetoothTransport.isAvailable();
+  const isBtConnected = isDirectConnected || bluetoothTransport.isAvailable();
 
   return (
     <>
@@ -53,9 +65,10 @@ export const ChatHeader: React.FC = () => {
               ) : isOnline ? (
                 <span className="text-emerald-500 font-medium">Online</span>
               ) : isBtConnected ? (
-                <span className="text-cyan-500 font-medium flex items-center space-x-0.5">
-                  <Bluetooth size={10} />
-                  <span>Bluetooth Relay</span>
+                <span className="text-emerald-500 font-medium flex items-center space-x-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <Bluetooth size={11} className="text-emerald-500" />
+                  <span>Connected to {connectedDirectPeer?.name || 'Nearby Device'}</span>
                 </span>
               ) : (
                 <span className="text-text-tertiary">{formatLastSeen(participant.lastSeen)}</span>
