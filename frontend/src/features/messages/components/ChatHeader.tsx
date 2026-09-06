@@ -17,11 +17,18 @@ export const ChatHeader: React.FC = () => {
   const [connectedDirectPeer, setConnectedDirectPeer] = useState<BluetoothPeerDevice | null>(null);
 
   useEffect(() => {
+    const handleOpenModal = () => setIsBtModalOpen(true);
+    window.addEventListener('nexus_open_bluetooth_modal', handleOpenModal);
+
     const unsub = offlineDirectChannel.subscribeStatus((connected, peer) => {
       setIsDirectConnected(connected);
       setConnectedDirectPeer(peer);
     });
-    return unsub;
+
+    return () => {
+      window.removeEventListener('nexus_open_bluetooth_modal', handleOpenModal);
+      unsub();
+    };
   }, []);
 
   if (!activeConversation || !activeConversation.participant) return null;

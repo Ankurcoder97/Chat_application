@@ -6,7 +6,7 @@ import { ChatHeader } from './ChatHeader';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
 import { Message } from '../../../shared/types';
-import { MessageSquare, ShieldCheck, WifiOff } from 'lucide-react';
+import { MessageSquare, ShieldCheck, WifiOff, Bluetooth } from 'lucide-react';
 import api from '../../../shared/lib/axios';
 import { format, isSameDay, parseISO } from 'date-fns';
 import { localCache } from '../../../shared/lib/localCache';
@@ -210,11 +210,28 @@ export const ChatView: React.FC = () => {
       {/* Header: pinned strictly to top */}
       <ChatHeader />
 
-      {/* Offline Status Warning Bar */}
-      {isOffline && (
-        <div className="flex items-center justify-center space-x-2 bg-amber-500/15 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 py-1.5 px-3 text-xs border-b border-amber-500/20 z-20 flex-shrink-0 animate-message-in">
-          <WifiOff size={13} className="flex-shrink-0" />
-          <span>Offline mode &bull; Messages will be sent automatically when back online</span>
+      {/* Offline / Bluetooth Status Warning Bar */}
+      {isOffline && !offlineDirectChannel.isConnected() && (
+        <div className="flex items-center justify-between bg-amber-500/15 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 py-2 px-3.5 text-xs border-b border-amber-500/20 z-20 flex-shrink-0 animate-message-in">
+          <div className="flex items-center space-x-2">
+            <WifiOff size={13} className="flex-shrink-0" />
+            <span>Offline &bull; Messages queued locally</span>
+          </div>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('nexus_open_bluetooth_modal'))}
+            className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 font-semibold text-[11px] transition-colors"
+          >
+            <Bluetooth size={12} />
+            <span>Connect Nearby Device</span>
+          </button>
+        </div>
+      )}
+
+      {offlineDirectChannel.isConnected() && (
+        <div className="flex items-center justify-center space-x-2 bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 py-1.5 px-3 text-xs border-b border-emerald-500/20 z-20 flex-shrink-0 animate-message-in font-medium">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <Bluetooth size={13} />
+          <span>Connected via Bluetooth &bull; Direct Offline Messaging Active</span>
         </div>
       )}
 

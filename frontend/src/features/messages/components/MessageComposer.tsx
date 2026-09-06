@@ -107,6 +107,27 @@ export const MessageComposer: React.FC = () => {
     }).then(({ transport, deliveryState }) => {
       optimisticMessage.transportType = transport;
       optimisticMessage.deliveryState = deliveryState;
+      const isSent = deliveryState === 'BLUETOOTH_TRANSFER' || deliveryState === 'SERVER_SYNCED';
+      if (isSent) {
+        optimisticMessage.isOptimistic = false;
+      }
+
+      queryClient.setQueryData(['messages', convId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          messages: old.messages.map((m: Message) =>
+            m.clientId === clientId
+              ? {
+                  ...m,
+                  transportType: transport,
+                  deliveryState,
+                  isOptimistic: isSent ? false : m.isOptimistic,
+                }
+              : m
+          ),
+        };
+      });
     });
 
     // 3. Queue in Outbox Manager (persists to local storage & flushes immediately when connection is available)
