@@ -210,7 +210,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, currentUs
               status={message.status}
               isOptimistic={message.isOptimistic}
               hasError={message.hasError}
-              transportType={message.transportType}
               deliveryState={message.deliveryState}
             />
           )}

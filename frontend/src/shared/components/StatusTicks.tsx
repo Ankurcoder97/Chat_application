@@ -1,12 +1,11 @@
 import React from 'react';
 import { MessageStatus } from '../types';
-import { Clock, Bluetooth } from 'lucide-react';
+import { Clock } from 'lucide-react';
 
 interface StatusTicksProps {
   status?: MessageStatus;
   isOptimistic?: boolean;
   hasError?: boolean;
-  transportType?: 'internet' | 'bluetooth' | 'local_mesh' | 'offline_queue';
   deliveryState?: string;
 }
 
@@ -14,27 +13,15 @@ export const StatusTicks: React.FC<StatusTicksProps> = ({
   status,
   isOptimistic,
   hasError,
-  transportType,
-  deliveryState,
 }) => {
   if (hasError) {
     return <span className="text-rose-400 text-xs font-bold" title="Failed to send">!</span>;
   }
 
-  // Bluetooth Transfer In Progress
-  if (deliveryState === 'BLUETOOTH_TRANSFER' || deliveryState === 'BLUETOOTH_RECEIVED') {
+  // Pending / optimistic (Clock icon)
+  if (isOptimistic) {
     return (
-      <span className="flex items-center space-x-0.5 text-cyan-300 text-[10px]" title="Relayed via Bluetooth">
-        <Bluetooth size={10} className="animate-pulse" />
-      </span>
-    );
-  }
-
-  // Pending Local Sync
-  if (isOptimistic || deliveryState === 'PENDING_LOCAL' || deliveryState === 'SYNC_PENDING') {
-    return (
-      <span className="flex items-center space-x-0.5 text-white/60">
-        {transportType === 'bluetooth' && <Bluetooth size={9} className="opacity-70 mr-0.5" />}
+      <span className="flex items-center text-white/60" title="Sending...">
         <Clock size={11} className="animate-pulse" />
       </span>
     );
@@ -46,8 +33,7 @@ export const StatusTicks: React.FC<StatusTicksProps> = ({
   if (isRead) {
     // Double Blue Check
     return (
-      <span className="inline-flex items-center">
-        {transportType === 'bluetooth' && <Bluetooth size={9} className="text-blue-300 opacity-80 mr-0.5" />}
+      <span className="inline-flex items-center" title="Read">
         <svg
           className="w-3.5 h-3.5 text-blue-300 inline-block align-middle"
           viewBox="0 0 16 16"
@@ -64,8 +50,7 @@ export const StatusTicks: React.FC<StatusTicksProps> = ({
   if (isDelivered) {
     // Double Gray Check
     return (
-      <span className="inline-flex items-center">
-        {transportType === 'bluetooth' && <Bluetooth size={9} className="text-white/70 opacity-80 mr-0.5" />}
+      <span className="inline-flex items-center" title="Delivered">
         <svg
           className="w-3.5 h-3.5 text-white/70 inline-block align-middle"
           viewBox="0 0 16 16"
@@ -81,8 +66,7 @@ export const StatusTicks: React.FC<StatusTicksProps> = ({
 
   // Single Sent Check
   return (
-    <span className="inline-flex items-center">
-      {transportType === 'bluetooth' && <Bluetooth size={9} className="text-white/70 opacity-80 mr-0.5" />}
+    <span className="inline-flex items-center" title="Sent">
       <svg
         className="w-3.5 h-3.5 text-white/70 inline-block align-middle"
         viewBox="0 0 16 16"

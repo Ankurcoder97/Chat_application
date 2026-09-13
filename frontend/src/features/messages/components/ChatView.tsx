@@ -1,114 +1,24 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useEffect, useRef, useLayoutEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useChatStore } from '../../conversations/store/chatStore';
 import { useAuthStore } from '../../auth/store/authStore';
 import { ChatHeader } from './ChatHeader';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
 import { Message } from '../../../shared/types';
-import { MessageSquare, ShieldCheck, WifiOff, Bluetooth } from 'lucide-react';
+import { MessageSquare, ShieldCheck } from 'lucide-react';
 import api from '../../../shared/lib/axios';
 import { format, isSameDay, parseISO } from 'date-fns';
 import { localCache } from '../../../shared/lib/localCache';
 import { outboxManager } from '../../../shared/lib/outboxManager';
-import { offlineDirectChannel } from '../../../shared/lib/transport/offlineDirectChannel';
 
 export const ChatView: React.FC = () => {
   const { activeConversation, typingUsers } = useChatStore();
   const { user } = useAuthStore();
-  const queryClient = useQueryClient();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoadRef = useRef<boolean>(true);
-  const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
 
   const conversationId = activeConversation?.id;
-
-  // Track online/offline status & Direct Offline P2P Events
-  useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-
-    const handleDirectMessageReceived = (e: any) => {
-      const newMsg = e.detail;
-      if (!newMsg || newMsg.conversationId !== conversationId) return;
-
-      queryClient.setQueryData(['messages', conversationId], (old: any) => {
-        if (!old) return { messages: [newMsg], hasMore: false };
-        const exists = old.messages.some((m: Message) => m.clientId === newMsg.clientId || m.id === newMsg.clientId);
-        if (exists) return old;
-        return { ...old, messages: [...old.messages, newMsg] };
-      });
-
-      // Send read receipt if this chat is active
-      if (conversationId) {
-        offlineDirectChannel.sendReadReceipt(newMsg.clientId, conversationId);
-      }
-    };
-
-    const handleDirectMessageDelivered = (e: any) => {
-      const { clientId, conversationId: convId, deliveredAt } = e.detail || {};
-      if (convId !== conversationId) return;
-
-      queryClient.setQueryData(['messages', conversationId], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          messages: old.messages.map((m: Message) =>
-            m.clientId === clientId || m.id === clientId
-              ? {
-                  ...m,
-                  isOptimistic: false,
-                  deliveryState: 'DELIVERED',
-                  status: {
-                    ...m.status,
-                    delivered: [{ userId: 'peer', at: deliveredAt || new Date().toISOString() }],
-                  },
-                }
-              : m
-          ),
-        };
-      });
-    };
-
-    const handleDirectMessageRead = (e: any) => {
-      const { clientId, conversationId: convId, readAt } = e.detail || {};
-      if (convId !== conversationId) return;
-
-      queryClient.setQueryData(['messages', conversationId], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          messages: old.messages.map((m: Message) =>
-            m.clientId === clientId || m.id === clientId
-              ? {
-                  ...m,
-                  isOptimistic: false,
-                  deliveryState: 'READ',
-                  status: {
-                    ...m.status,
-                    read: [{ userId: 'peer', at: readAt || new Date().toISOString() }],
-                  },
-                }
-              : m
-          ),
-        };
-      });
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    window.addEventListener('nexus_direct_message_received', handleDirectMessageReceived);
-    window.addEventListener('nexus_message_delivered', handleDirectMessageDelivered);
-    window.addEventListener('nexus_message_read', handleDirectMessageRead);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('nexus_direct_message_received', handleDirectMessageReceived);
-      window.removeEventListener('nexus_message_delivered', handleDirectMessageDelivered);
-      window.removeEventListener('nexus_message_read', handleDirectMessageRead);
-    };
-  }, [conversationId, queryClient]);
 
   const { data, isLoading } = useQuery<{ messages: Message[]; hasMore: boolean }>({
     queryKey: ['messages', conversationId],
@@ -209,31 +119,6 @@ export const ChatView: React.FC = () => {
     <div className="flex flex-1 flex-col h-full w-full min-h-0 bg-surface-chat overflow-hidden relative">
       {/* Header: pinned strictly to top */}
       <ChatHeader />
-
-      {/* Offline / Bluetooth Status Warning Bar */}
-      {isOffline && !offlineDirectChannel.isConnected() && (
-        <div className="flex items-center justify-between bg-amber-500/15 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 py-2 px-3.5 text-xs border-b border-amber-500/20 z-20 flex-shrink-0 animate-message-in">
-          <div className="flex items-center space-x-2">
-            <WifiOff size={13} className="flex-shrink-0" />
-            <span>Offline &bull; Messages queued locally</span>
-          </div>
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent('nexus_open_bluetooth_modal'))}
-            className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 font-semibold text-[11px] transition-colors"
-          >
-            <Bluetooth size={12} />
-            <span>Connect Nearby Device</span>
-          </button>
-        </div>
-      )}
-
-      {offlineDirectChannel.isConnected() && (
-        <div className="flex items-center justify-center space-x-2 bg-emerald-500/15 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 py-1.5 px-3 text-xs border-b border-emerald-500/20 z-20 flex-shrink-0 animate-message-in font-medium">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <Bluetooth size={13} />
-          <span>Connected via Bluetooth &bull; Direct Offline Messaging Active</span>
-        </div>
-      )}
 
       {/* Message Stream: isolated scroll container */}
       <div
