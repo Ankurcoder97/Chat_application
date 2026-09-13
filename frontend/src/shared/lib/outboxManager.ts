@@ -119,10 +119,10 @@ class OutboxManager {
     return this.queue.filter((item) => item.retryCount > 2);
   }
 
-  // Clear messages older than 7 days
+  // Clear messages older than 24 hours
   private cleanOldMessages() {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    this.queue = this.queue.filter((item) => new Date(item.queuedAt) > sevenDaysAgo);
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    this.queue = this.queue.filter((item) => new Date(item.queuedAt) > oneDayAgo);
     this.saveQueue();
   }
 
@@ -133,15 +133,14 @@ class OutboxManager {
     }
 
     this.isFlushing = true;
-    console.log(`📤 Flushing ${this.queue.length} queued offline messages...`);
     this.cleanOldMessages();
 
     const itemsToSend = [...this.queue];
 
     for (const item of itemsToSend) {
-      // Skip if already retried too many times
-      if (item.retryCount > 5) {
-        console.warn(`⚠️ Message [${item.clientId}] exceeded max retries, will keep in queue for manual review`);
+      if (item.retryCount > 3) {
+        // Drop excessively retried items to prevent blocking new messages
+        this.dequeue(item.clientId);
         continue;
       }
 
@@ -150,9 +149,9 @@ class OutboxManager {
         let sentSuccessfully = false;
 
         if (socket && socket.connected) {
-          // Send via Socket
+          // Send via Socket with quick 2s timeout
           await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Socket send timeout')), 7000);
+            const timeout = setTimeout(() => reject(new Error('Socket send timeout')), 2000);
 
             socket.emit(
               'message:send',
@@ -166,7 +165,7 @@ class OutboxManager {
               },
               (res: any) => {
                 clearTimeout(timeout);
-                if (res?.error) {
+                if (res?.error && !res.error.toLowerCase().includes('duplicate') && !res.error.includes('E11000')) {
                   reject(new Error(res.error));
                 } else {
                   sentSuccessfully = true;
@@ -191,20 +190,13 @@ class OutboxManager {
         }
 
         if (sentSuccessfully) {
-          console.log(`✅ Queued message [${item.clientId}] sent successfully`);
           this.dequeue(item.clientId);
-          // Emit notification that message was sent
           this.notify();
         }
       } catch (err) {
-        console.warn(`⚠️ Failed to send queued message [${item.clientId}], will retry later`, err);
         item.retryCount = (item.retryCount || 0) + 1;
         this.saveQueue();
-        // If we hit a network failure, stop flushing until next network event
-        if (!this.isOnline()) {
-          console.log('🔌 Network went offline, pausing flush queue');
-          break;
-        }
+        if (!this.isOnline()) break;
       }
     }
 

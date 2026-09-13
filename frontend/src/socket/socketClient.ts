@@ -26,16 +26,19 @@ export function connectSocket(): Socket {
 
   const targetUrl =
     import.meta.env.VITE_SOCKET_URL ||
-    (window.location.hostname === 'localhost' ? 'http://localhost:5000' : undefined);
+    (window.location.hostname === 'localhost'
+      ? 'http://localhost:5000'
+      : 'https://chat-application-er43.onrender.com');
 
   socket = io(targetUrl, {
     auth: { token },
     reconnection: true,
     reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    timeout: 20000,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 2000,
+    timeout: 10000,
     transports: ['websocket', 'polling'],
+    upgrade: true,
   });
 
   socket.on('connect', () => {

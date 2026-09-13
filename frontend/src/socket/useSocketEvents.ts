@@ -77,11 +77,12 @@ export function useSocketEvents() {
     };
 
     // 2. Message Ack (Replaces optimistic message with server message)
-    const handleMessageAck = ({ clientId, serverId, sentAt, seqNo }: any) => {
+    const handleMessageAck = ({ clientId, conversationId, serverId, sentAt, seqNo }: any) => {
       outboxManager.dequeue(clientId);
-      if (activeConversation) {
-        localCache.updateMessageStatus(activeConversation.id, clientId, serverId, sentAt, seqNo);
-        queryClient.setQueryData(['messages', activeConversation.id], (oldData: any) => {
+      const targetConvId = conversationId || activeConversation?.id;
+      if (targetConvId) {
+        localCache.updateMessageStatus(targetConvId, clientId, serverId, sentAt, seqNo);
+        queryClient.setQueryData(['messages', targetConvId], (oldData: any) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
@@ -94,10 +95,7 @@ export function useSocketEvents() {
                     seqNo,
                     isOptimistic: false,
                     hasError: false,
-                    status: {
-                      ...m.status,
-                      delivered: [{ userId: user?.id || 'server', at: new Date().toISOString() }],
-                    },
+                    deliveryState: 'SERVER_SYNCED',
                   }
                 : m
             ),
@@ -105,7 +103,7 @@ export function useSocketEvents() {
         });
 
         // Persist the delivered status to cache as well
-        localCache.updateMessageDeliveryStatus(activeConversation.id, serverId, user?.id || 'server', sentAt);
+        localCache.updateMessageDeliveryStatus(targetConvId, serverId, user?.id || 'server', sentAt);
       }
     };
 

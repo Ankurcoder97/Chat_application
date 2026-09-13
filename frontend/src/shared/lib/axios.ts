@@ -5,7 +5,7 @@ const api = axios.create({
     import.meta.env.VITE_API_URL ||
     (typeof window !== 'undefined' && window.location.hostname === 'localhost'
       ? 'http://localhost:5000/api/v1'
-      : '/api/v1'),
+      : 'https://chat-application-er43.onrender.com/api/v1'),
   headers: {
     'Content-Type': 'application/json',
   },

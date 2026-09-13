@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { AuthenticatedSocket } from '../socket.server';
 import { Message } from '../../modules/messages/message.model';
 import { Conversation } from '../../modules/conversations/conversation.model';
+import { User } from '../../modules/users/user.model';
 import { checkIdempotency } from '../../shared/redis';
 import { logger } from '../../shared/logger';
 
@@ -60,71 +61,79 @@ export function registerMessageHandlers(io: SocketIOServer, socket: Authenticate
         }
       }
 
-      const message = await Message.create({
-        clientId,
-        conversationId: conversation._id,
-        senderId: new Types.ObjectId(currentUserId),
-        seqNo,
-        type,
-        content: content || '',
-        media: media || undefined,
-        replyTo: replyToData,
-        reactions: [],
-        sentAt: new Date(),
-      });
+      const now = new Date();
 
-      // Update conversation lastMessage & unread count
-      conversation.lastMessage = {
-        id: message._id,
-        content: type === 'text' ? content : `[${type}]`,
-        type,
-        sentAt: message.sentAt,
-        senderId: new Types.ObjectId(currentUserId),
-      };
-
-      conversation.participantMeta.forEach((meta) => {
-        if (!meta.userId.equals(currentUserId)) {
-          meta.unreadCount = (meta.unreadCount || 0) + 1;
-        }
-      });
-
-      await conversation.save();
-
-      const populatedMessage = await Message.findById(message._id)
-        .populate('senderId', 'name username avatarUrl')
-        .lean();
+      // Parallelize message creation and sender user fetch
+      const [message, senderUser] = await Promise.all([
+        Message.create({
+          clientId,
+          conversationId: conversation._id,
+          senderId: new Types.ObjectId(currentUserId),
+          seqNo,
+          type,
+          content: content || '',
+          media: media || undefined,
+          replyTo: replyToData,
+          reactions: [],
+          sentAt: now,
+        }),
+        User.findById(currentUserId, 'name username avatarUrl').lean(),
+      ]);
 
       const formattedMessage = {
-        id: populatedMessage?._id,
-        clientId: populatedMessage?.clientId,
-        conversationId: populatedMessage?.conversationId,
+        id: message._id,
+        clientId: message.clientId,
+        conversationId: message.conversationId,
         senderId: currentUserId,
-        sender: populatedMessage?.senderId,
-        seqNo: populatedMessage?.seqNo,
-        type: populatedMessage?.type,
-        content: populatedMessage?.content,
-        media: populatedMessage?.media,
-        replyTo: populatedMessage?.replyTo,
-        reactions: populatedMessage?.reactions,
-        status: populatedMessage?.status,
-        sentAt: populatedMessage?.sentAt,
+        sender: senderUser || { id: currentUserId, name: '', username: '' },
+        seqNo: message.seqNo,
+        type: message.type,
+        content: message.content,
+        media: message.media,
+        replyTo: message.replyTo,
+        reactions: message.reactions,
+        status: message.status,
+        sentAt: message.sentAt,
       };
 
-      // 1. Send Ack back to sender
+      // 1. Send Ack back to sender immediately (sub-20ms)
       if (typeof callback === 'function') {
         callback({ success: true, message: formattedMessage });
       }
       socket.emit('message:ack', {
         clientId,
+        conversationId: conversationId.toString(),
         serverId: message._id,
         sentAt: message.sentAt,
         seqNo,
       });
 
-      // 2. Broadcast message:new to all participants
+      // 2. Broadcast message:new to all participants immediately
       conversation.participants.forEach((pId) => {
         io.to(`user:${pId}`).emit('message:new', formattedMessage);
       });
+
+      // 3. Update conversation lastMessage & unread count asynchronously in background
+      Conversation.updateOne(
+        { _id: conversation._id },
+        {
+          $set: {
+            lastMessage: {
+              id: message._id,
+              content: type === 'text' ? content : `[${type}]`,
+              type,
+              sentAt: message.sentAt,
+              senderId: new Types.ObjectId(currentUserId),
+            },
+          },
+          $inc: {
+            'participantMeta.$[elem].unreadCount': 1,
+          },
+        },
+        {
+          arrayFilters: [{ 'elem.userId': { $ne: new Types.ObjectId(currentUserId) } }],
+        }
+      ).catch((err) => logger.warn({ err }, 'Background conversation update failed'));
     } catch (err: any) {
       logger.error({ err }, 'Error handling message:send');
       if (typeof callback === 'function') callback({ error: err.message });

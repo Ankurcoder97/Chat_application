@@ -18,12 +18,15 @@ export function initRedis(): {
   try {
     const opts = {
       maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+      connectTimeout: 2000,
+      commandTimeout: 400,
       retryStrategy(times: number) {
-        if (times > 3) {
-          logger.warn('⚠️ Redis connection failed 3 times. Falling back to in-memory store.');
+        if (times > 2) {
+          logger.warn('⚠️ Redis connection failed. Falling back to in-memory store.');
           return null; // Stop retrying automatically
         }
-        return Math.min(times * 100, 1000);
+        return 500;
       },
     };
 

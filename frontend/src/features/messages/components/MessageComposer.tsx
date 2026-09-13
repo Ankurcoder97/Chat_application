@@ -128,19 +128,21 @@ export const MessageComposer: React.FC = () => {
           ),
         };
       });
-    });
 
-    // 3. Queue in Outbox Manager (persists to local storage & flushes immediately when connection is available)
-    outboxManager.enqueue({
-      clientId,
-      conversationId: convId,
-      content,
-      type: mediaPayload ? type : 'text',
-      media: mediaPayload,
-      replyToId: replyTo?.messageId,
-      queuedAt: optimisticMessage.sentAt,
-      retryCount: 0,
-      optimisticMessage,
+      // Only queue in offline outbox if neither Internet nor Bluetooth could deliver
+      if (transport === 'offline_queue') {
+        outboxManager.enqueue({
+          clientId,
+          conversationId: convId,
+          content,
+          type: mediaPayload ? type : 'text',
+          media: mediaPayload,
+          replyToId: replyTo?.messageId,
+          queuedAt: optimisticMessage.sentAt,
+          retryCount: 0,
+          optimisticMessage,
+        });
+      }
     });
 
     setText('');
